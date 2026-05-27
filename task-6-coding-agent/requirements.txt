@@ -1,5 +1,6 @@
-mcp>=0.9             # 官方 MCP Python SDK
-openai>=1.30         # 调本地模型的 OpenAI 兼容客户端
+# 本任务通过 OpenAI 兼容 API 调用模型，无需本地 CUDA 依赖
+mcp>=0.9
+openai>=1.30
 gitpython>=3.1
 pytest>=7.0
 requests>=2.31

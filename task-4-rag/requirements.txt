@@ -1,9 +1,10 @@
-torch>=2.0
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch>=2.1
 transformers>=4.40
 sentence-transformers>=2.7
 faiss-cpu>=1.7
 pypdf>=4.0
-numpy>=1.23
+numpy>=1.23,<2.0
 pandas>=2.0
 tqdm>=4.65
 huggingface_hub>=0.20
