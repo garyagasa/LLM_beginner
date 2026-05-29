@@ -15,7 +15,7 @@
 2. BGE embedding + FAISS 索引
 3. 召回 + BGE reranker 精排
 4. 把召回内容拼 prompt 调 Qwen2.5-7B-Instruct 生成答案
-5. 在 `data/gold_qa.jsonl` 上跑 NNDL gold source 召回评测；gold QA 共 30 条，基于 `../神经网络与深度学习2/` LaTeX 正文设计，但索引应来自 `data/kb.pdf`
+5. 在 `data/gold_qa.jsonl` 上跑 NNDL gold source 召回评测；gold QA 约 30 条，基于 `../神经网络与深度学习2/` LaTeX 正文设计，但索引应来自 `data/kb.pdf`
 
 ## 评审检查项
 

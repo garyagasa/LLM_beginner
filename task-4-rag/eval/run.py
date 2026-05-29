@@ -2,11 +2,15 @@
 import json
 import re
 import sys
-import traceback
 from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(ROOT))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))           # from src.* —— 学生实现
+sys.path.insert(0, str(ROOT.parent))    # from _eval_harness —— 共用运行壳
+
+from _eval_harness import run_tests
+
+RECALL_AT_10_PASS = 0.6   # gold 召回 recall@10 通过线
 
 
 def normalize_text(text):
@@ -40,7 +44,7 @@ def test_chunking_sanity():
             "expected_avg_range": [chunk_size * 0.5, chunk_size * 1.2]}
 
 
-def test_nndl_gold_recall():
+def test_nndl_gold_recall_at_10():
     from src.retriever import Retriever
     gold, skip = load_gold_qa()
     if skip:
@@ -87,7 +91,7 @@ def test_nndl_gold_recall():
     }
     metrics["mrr"] = round(sum(reciprocal_ranks) / len(gold), 3)
     return {"test": "nndl_gold_recall_at_10",
-            "pass": metrics["recall_at_10"] > 0.6,
+            "pass": metrics["recall_at_10"] > RECALL_AT_10_PASS,
             "n": len(gold), **metrics, "details": details}
 
 
@@ -104,23 +108,6 @@ def test_rag_end_to_end():
         return {"test": "rag_end_to_end", "pass": False, "error": str(e)}
 
 
-def main():
-    results = []
-    for fn in [test_chunking_sanity, test_nndl_gold_recall, test_rag_end_to_end]:
-        try:
-            r = fn()
-        except Exception as e:
-            r = {"test": fn.__name__.replace("test_", ""),
-                 "pass": False, "error": str(e),
-                 "trace": traceback.format_exc().splitlines()[-3:]}
-        results.append(r)
-        tag = "[通过]" if r.get("pass") is True else \
-              ("[跳过]" if r.get("pass") is None else "[失败]")
-        print(f"{tag} {r['test']}: {json.dumps(r, ensure_ascii=False)}")
-    out = ROOT / "eval" / "result.json"
-    out.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n结果写入 {out.relative_to(ROOT)}")
-
-
 if __name__ == "__main__":
-    main()
+    run_tests([test_chunking_sanity, test_nndl_gold_recall_at_10,
+               test_rag_end_to_end], ROOT)

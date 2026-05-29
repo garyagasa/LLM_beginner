@@ -36,6 +36,7 @@
    - cache 拼接是否在 K/V 的 sequence 维度上？
    - 推理时只 forward 最后一个 token，cache 自动延伸？
    - 是否做了 cache 长度上限（避免无限增长）？
+   - 模型是否暴露 `block_size` / `max_seq_len`？长序列（含困惑度自检）是否按上下文长度分段，避免越界或 RoPE 外推失真？
 5. **训练**
    - learning rate schedule（warmup + cosine）
    - gradient clipping
@@ -76,4 +77,4 @@
 
 ## 我的代码
 
-[粘贴 src/tokenizer.py + src/rope.py + src/attention.py + src/model.py 的关键部分]
+[粘贴 src/tokenizer.py 与 src/model.py（含 RoPE / attention / decoder block，无论你拆成几个文件）的关键部分]

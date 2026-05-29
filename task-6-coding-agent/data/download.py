@@ -14,19 +14,45 @@ def write_text(path, text):
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
+BUGGY_CALCULATOR = (
+    "def add(a, b):\n"
+    "    \"\"\"Return the sum of two numbers.\"\"\"\n"
+    "    return a - b\n\n"
+    "def factorial(n):\n"
+    "    if n < 0:\n"
+    "        raise ValueError('n must be non-negative')\n"
+    "    result = 1\n"
+    "    for value in range(2, n + 1):\n"
+    "        result *= value\n"
+    "    return result\n"
+)
+
+
+def _init_git_repo():
+    """给 toy repo 建带初始 commit 的 git 仓库，供 agent 跑 git/diff。
+
+    内联 user.name/email，避免新机器未配 git 身份时 commit 静默失败。状态重置已改用
+    calculator.py.orig 快照（见 eval/run.py），git 在这里只是锦上添花，缺了也不影响评测。
+    """
+    if (TOY_REPO / ".git").exists():
+        return
+    ident = ["-c", "user.name=nndl-tutor", "-c", "user.email=tutor@nndl.ai"]
+    quiet = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    try:
+        subprocess.run(["git", "init"], cwd=TOY_REPO, check=True, **quiet)
+        subprocess.run(["git", "add", "."], cwd=TOY_REPO, check=True, **quiet)
+        subprocess.run(["git", *ident, "commit", "-m", "initial toy repo"],
+                       cwd=TOY_REPO, check=True, **quiet)
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"[提示] 跳过 git 初始化（{type(e).__name__}）；"
+              "自检靠 calculator.py.orig 快照重置，不影响评测。")
+
+
 def create_toy_repo():
     TOY_REPO.mkdir(parents=True, exist_ok=True)
-    write_text(TOY_REPO / "calculator.py",
-               "def add(a, b):\n"
-               "    \"\"\"Return the sum of two numbers.\"\"\"\n"
-               "    return a - b\n\n"
-               "def factorial(n):\n"
-               "    if n < 0:\n"
-               "        raise ValueError('n must be non-negative')\n"
-               "    result = 1\n"
-               "    for value in range(2, n + 1):\n"
-               "        result *= value\n"
-               "    return result\n")
+    write_text(TOY_REPO / "calculator.py", BUGGY_CALCULATOR)
+    # 留一份初始 buggy 快照，eval 每次从它恢复 calculator.py（不依赖 git 状态）。
+    write_text(TOY_REPO / "calculator.py.orig", BUGGY_CALCULATOR)
     write_text(TOY_REPO / "test_calculator.py",
                "from calculator import add, factorial\n\n"
                "def test_add_positive_numbers():\n"
@@ -38,16 +64,7 @@ def create_toy_repo():
     write_text(TOY_REPO / "ISSUE.md",
                "修复 `calculator.add` 的实现，使 `python -m pytest` 全部通过。"
                "不要改测试文件。\n")
-    if not (TOY_REPO / ".git").exists():
-        try:
-            subprocess.run(["git", "init"], cwd=TOY_REPO, check=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(["git", "add", "."], cwd=TOY_REPO, check=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(["git", "commit", "-m", "initial toy repo"], cwd=TOY_REPO,
-                           check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception:
-            pass
+    _init_git_repo()
     print(f"已生成本地 toy repo：{TOY_REPO.relative_to(DATA_DIR.parent)}")
 
 

@@ -51,7 +51,7 @@ python data/download.py --with-swebench
 
 | 文件 | 必须导出 |
 |---|---|
-| `src/mcp_server.py` | 可独立运行的 MCP server（`python src/mcp_server.py` 启动），列出所有工具 |
+| `src/mcp_server.py` | 可独立运行的 MCP server（`python src/mcp_server.py` 启动）；并在模块顶层导出 `list_tools() -> List[dict]`（每个含 `name`）供自检枚举工具 |
 | `src/skill_loader.py` | `class SkillLoader` 含 `list_skills() -> List[dict]`、`load(name) -> str` |
 | `src/agent.py` | `class CodingAgent` 含 `run(repo_path: str, issue: str) -> Trace`；`Trace` 含 `steps`、`patch`、`tests_passed: bool` |
 

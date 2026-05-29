@@ -3,7 +3,9 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -36,7 +38,17 @@ def download_pdf():
         return
     print(f"下载 NNDL v2 PDF -> {out.name}")
     tmp = out.with_suffix(".pdf.tmp")
-    urllib.request.urlretrieve(PDF_URL, tmp)
+    req = urllib.request.Request(PDF_URL, headers={"User-Agent": "nndl-llm-beginner"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp, tmp.open("wb") as f:
+            shutil.copyfileobj(resp, f)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        tmp.unlink(missing_ok=True)
+        sys.exit(f"[错误] 下载 PDF 失败：{e}\n"
+                 f"  可手动下载 {PDF_URL}\n  另存为 {out} 后重跑本脚本。")
+    if tmp.stat().st_size == 0:
+        tmp.unlink(missing_ok=True)
+        sys.exit(f"[错误] 下载得到空文件；请手动下载 {PDF_URL} 另存为 {out}。")
     tmp.replace(out)
     print("完成")
 

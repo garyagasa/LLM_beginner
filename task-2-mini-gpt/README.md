@@ -42,7 +42,7 @@ python data/download.py --dataset skypile       # ~1GB+，建议 GPU
 | 文件 | 必须导出 |
 |---|---|
 | `src/tokenizer.py` | `class BPETokenizer` 含 `encode(text) -> List[int]`、`decode(ids) -> str`、`vocab_size`、`from_pretrained(path)` |
-| `src/model.py` | `class MiniGPT(nn.Module)` 含 `forward(ids, kv_cache=None, return_cache=False)`、`generate(prompt_ids, max_new_tokens, top_p, temperature)`；`load_for_eval(ckpt_path) -> (model, tokenizer)` |
+| `src/model.py` | `class MiniGPT(nn.Module)` 含 `forward(ids, kv_cache=None, return_cache=False)`、`generate(prompt_ids, max_new_tokens, top_p, temperature)`、属性 `block_size`/`max_seq_len`（自检按它对困惑度切窗，取不到默认 256）；`load_for_eval(ckpt_path) -> (model, tokenizer)` |
 | `ckpt/tokenizer.json` | 训练好的 BPE 词表 |
 | `ckpt/best.pt` | 训练好的模型 state_dict |
 
@@ -57,6 +57,8 @@ python eval/run.py
 | `tokenizer_roundtrip` | encode → decode 应还原中文文本（除已知 UTF-8 边界 case） |
 | `kv_cache_equivalence` | 开 KV cache 与不开的 logits 一致（误差 < 1e-4） |
 | `perplexity_on_dev` | dev set 困惑度；阈值从 `data/dataset_info.json` 读取（唐诗默认 < 50，TinyStories 默认 < 10） |
+
+> `perplexity_on_dev` 读取 `data/dev.txt`（最多取前 4096 token），并按模型上下文长度滑窗累加 NLL 后求困惑度——窗口长度取 `MiniGPT.block_size` 或 `max_seq_len`，取不到则默认 256。因此小上下文模型也能跑通、不会越界或 OOM；建议给 `MiniGPT` 暴露 `block_size` 或 `max_seq_len` 属性，让自检按你的真实训练长度切窗。
 
 ## AI Tutor 反馈
 

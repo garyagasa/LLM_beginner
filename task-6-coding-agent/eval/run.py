@@ -1,12 +1,14 @@
 """任务六自检：MCP server 工具列表 + Skill loader 元数据 + SWE-bench Lite 抽样跑通。"""
-import json
+import shutil
 import subprocess
 import sys
-import traceback
 from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(ROOT))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))           # from src.* —— 学生实现
+sys.path.insert(0, str(ROOT.parent))    # from _eval_harness —— 共用运行壳
+
+from _eval_harness import run_tests
 
 
 def test_mcp_server_lists_tools():
@@ -49,6 +51,15 @@ def test_toy_repo_patch():
         return {"test": "toy_repo_patch", "pass": None,
                 "skip": "data/toy-repo 不存在；先跑 data/download.py"}
 
+    # 每次从 download.py 留下的 buggy 快照恢复 calculator.py，避免 agent 上一次
+    # 已修过后本次空跑也让 pytest 通过。不依赖 git 状态——新机器未配 git 身份时
+    # 初始 commit 会静默失败，原先的 git checkout 重置随之失效。
+    buggy = toy_repo / "calculator.py.orig"
+    if not buggy.exists():
+        return {"test": "toy_repo_patch", "pass": None,
+                "skip": "缺少 calculator.py.orig 基准快照；请重跑 data/download.py"}
+    shutil.copy(buggy, toy_repo / "calculator.py")
+
     agent = CodingAgent()
     issue = issue_path.read_text(encoding="utf-8")
     trace = agent.run(repo_path=str(toy_repo), issue=issue)
@@ -69,7 +80,8 @@ def test_toy_repo_patch():
 
 
 def test_swebench_lite_sample():
-    from src.agent import CodingAgent
+    # SWE-bench 样本要 `--with-swebench` 才下载，默认是空；
+    # 先做数据存在性检查，避免学生没打算跑 swebench 时被 src.agent 的 ImportError 抢先报失败。
     sample_path = ROOT / "data" / "swebench-lite-sample.parquet"
     if not sample_path.exists():
         return {"test": "swebench_lite_sample", "pass": None,
@@ -80,6 +92,7 @@ def test_swebench_lite_sample():
     except Exception as e:
         return {"test": "swebench_lite_sample", "pass": False, "error": str(e)}
 
+    from src.agent import CodingAgent
     agent = CodingAgent()
     passed = 0
     results = []
@@ -108,24 +121,6 @@ def test_swebench_lite_sample():
             "details": results}
 
 
-def main():
-    results = []
-    for fn in [test_mcp_server_lists_tools, test_skill_loader_metadata,
-               test_toy_repo_patch, test_swebench_lite_sample]:
-        try:
-            r = fn()
-        except Exception as e:
-            r = {"test": fn.__name__.replace("test_", ""),
-                 "pass": False, "error": str(e),
-                 "trace": traceback.format_exc().splitlines()[-3:]}
-        results.append(r)
-        tag = "[通过]" if r.get("pass") is True else \
-              ("[跳过]" if r.get("pass") is None else "[失败]")
-        print(f"{tag} {r['test']}: {json.dumps(r, ensure_ascii=False)}")
-    out = ROOT / "eval" / "result.json"
-    out.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n结果写入 {out.relative_to(ROOT)}")
-
-
 if __name__ == "__main__":
-    main()
+    run_tests([test_mcp_server_lists_tools, test_skill_loader_metadata,
+               test_toy_repo_patch, test_swebench_lite_sample], ROOT)
