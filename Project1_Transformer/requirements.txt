@@ -1,0 +1,32 @@
+# ================================================================
+#  Project1 Transformer — 依赖清单
+# ================================================================
+#  🎮 GPU 版安装（Linux + CUDA 12.6，两步走）：
+#      pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+#      pip install -r requirements.txt
+#
+#  💻 CPU only 备选（无 NVIDIA 显卡时）：
+#      pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#      pip install -r requirements.txt
+# ================================================================
+
+# ---- 深度学习框架（GPU：CUDA 12.6 → torch>=2.4；CPU：torch>=2.0 即可）----
+# torch / torchvision 已在上方命令行单独安装，此处不再重复
+# 如需锁定版本，取消下面两行注释：
+# torch>=2.4
+# torchvision>=0.19
+
+# ---- 数据处理 ----
+datasets>=2.14             # HuggingFace datasets（下载 ChnSentiCorp）
+pyarrow>=12.0              # parquet 读写（datasets 依赖）
+pandas>=2.0                # DataFrame 操作
+
+# ---- 可选：HuggingFace tokenizer 集成 ----
+transformers>=4.35         # 仅用于参考 tokenizer API（不调预训练模型）
+tokenizers>=0.14
+
+# ---- 可视化 ----
+matplotlib>=3.5            # 注意力热图
+
+# ---- 基础 ----
+numpy>=1.23
