@@ -1,8 +1,10 @@
 """训练脚本：在 ChnSentiCorp 上训练 TransformerClassifier。
 
 用法：
-    python train.py                # 默认超参
+    python train.py                # 默认超参（默认开启 wandb）
     python train.py --epochs 10    # 覆盖参数
+    python train.py --no-wandb     # 不上传 wandb
+    WANDB_MODE=offline python train.py   # 离线记录，之后 wandb sync
 
 输出：
     ckpt/best.pt         最佳模型
@@ -63,6 +65,11 @@ def parse_args():
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--num_workers", type=int, default=2)
     p.add_argument("--no_early_stop", action="store_true", help="禁用 early stopping")
+    # wandb
+    p.add_argument("--no-wandb", action="store_true", help="禁用 Weights & Biases 日志")
+    p.add_argument("--wandb-project", type=str, default="llm-beginner-p1-transformer")
+    p.add_argument("--wandb-run-name", type=str, default=None, help="run 名称，默认自动生成")
+    p.add_argument("--wandb-entity", type=str, default=None, help="wandb 团队/用户名，默认用已登录账号")
     return p.parse_args()
 
 
@@ -113,6 +120,55 @@ def set_seed(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
+def init_wandb(args: argparse.Namespace, extra: dict | None = None):
+    """初始化 wandb；未安装、--no-wandb 或初始化失败时返回 None。"""
+    if args.no_wandb:
+        print("[wandb] 已禁用（--no-wandb）")
+        return None
+    try:
+        import wandb
+    except ImportError:
+        print("[wandb] 未安装，跳过。可执行: pip install wandb")
+        return None
+
+    config = {**vars(args), **(extra or {})}
+    try:
+        run = wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=args.wandb_run_name,
+            config=config,
+        )
+        print(f"[wandb] 已连接: {run.url}")
+        return run
+    except Exception as e:
+        print(f"[wandb] 初始化失败，继续训练（无日志）: {e}")
+        return None
+
+
+def wandb_log(metrics: dict, step: int | None = None) -> None:
+    try:
+        import wandb
+
+        if wandb.run is not None:
+            wandb.log(metrics, step=step)
+    except ImportError:
+        pass
+
+
+def wandb_finish(summary: dict | None = None) -> None:
+    try:
+        import wandb
+
+        if wandb.run is not None:
+            if summary:
+                for k, v in summary.items():
+                    wandb.run.summary[k] = v
+            wandb.finish()
+    except ImportError:
+        pass
+
+
 def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> float:
     """在 dev set 上计算准确率。"""
     model.eval()
@@ -134,18 +190,46 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> floa
 # ---------------------------------------------------------------------------
 
 
+def _setup_matplotlib_english():
+    """热图统一用英文字体（DejaVu Sans），轴标签用 ASCII 位置编号。"""
+    import matplotlib.pyplot as plt
+
+    plt.rcParams["font.family"] = "DejaVu Sans"
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans"]
+    plt.rcParams["axes.unicode_minus"] = False
+
+
+def _ascii_tick_labels(tokens: list[str]) -> list[str]:
+    """把 token 转成 ASCII 轴标签，避免中文缺字警告。"""
+    labels = []
+    for i, tok in enumerate(tokens):
+        if tok == "[CLS]":
+            labels.append("[CLS]")
+        elif tok.startswith("<") and tok.endswith(">"):
+            labels.append(tok)  # <PAD> / <UNK> 等 ASCII 特殊符
+        else:
+            labels.append(f"#{i}")
+    return labels
+
+
 def plot_attention_heatmaps(model, tokenizer, sentences, device, save_dir):
     """生成注意力热图并保存到 save_dir。"""
     import matplotlib.pyplot as plt
 
+    _setup_matplotlib_english()
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
     model.eval()
+    max_len = getattr(model, "max_len", 200)
 
     for idx, (text, label_name) in enumerate(sentences):
         ids = tokenizer.encode(text, add_cls=True)
+        truncated = len(ids) > max_len
+        if truncated:
+            ids = ids[:max_len]
         tokens = [tokenizer.idx_to_char.get(i, "[?]") for i in ids]
+        tick_labels = _ascii_tick_labels(tokens)
         input_ids = torch.tensor(ids, dtype=torch.long).unsqueeze(0).to(device)  # (1, T)
 
         # 需要获取 attention weights —— 这里暂时用简单的方式：
@@ -190,17 +274,18 @@ def plot_attention_heatmaps(model, tokenizer, sentences, device, save_dir):
                     im = ax.imshow(avg_attn, cmap="Reds", aspect="auto")
                     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
-                    # 标签（只标前 30 个 token 避免太密）
+                    # 轴标签：位置编号（ASCII），只标前 30 个 token 避免太密
                     show_n = min(T, 30)
                     ax.set_xticks(range(show_n))
-                    ax.set_xticklabels(tokens[:show_n], rotation=90, fontsize=8)
+                    ax.set_xticklabels(tick_labels[:show_n], rotation=90, fontsize=8)
                     ax.set_yticks(range(show_n))
-                    ax.set_yticklabels(tokens[:show_n], fontsize=8)
-                    ax.set_xlabel("Key")
-                    ax.set_ylabel("Query")
+                    ax.set_yticklabels(tick_labels[:show_n], fontsize=8)
+                    ax.set_xlabel("Key (token position)")
+                    ax.set_ylabel("Query (token position)")
+                    trunc_note = f", truncated to {max_len} tokens" if truncated else ""
                     ax.set_title(
                         f"Attention Heatmap — Layer {len(model.blocks)}, all-head avg\n"
-                        f"Label: {label_name}  |  Text: {text[:40]}..."
+                        f"Sample: {label_name}{trunc_note} | length={len(text)} chars, T={T}"
                     )
                     fig.tight_layout()
                     fig.savefig(
@@ -284,6 +369,17 @@ def main():
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"总参数量: {total_params:,}  (可训练: {trainable_params:,})")
 
+    wandb_run = init_wandb(
+        args,
+        extra={
+            "vocab_size": len(tokenizer),
+            "train_size": len(train_df),
+            "dev_size": len(dev_df),
+            "total_params": total_params,
+            "trainable_params": trainable_params,
+        },
+    )
+
     # ---- 优化器 & 调度器 ----
     optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     total_steps = len(train_loader) * args.epochs
@@ -345,9 +441,13 @@ def main():
 
             train_loss += loss.item()
             global_step += 1
+            current_lr = optimizer.param_groups[0]["lr"]
+            wandb_log(
+                {"train/loss": loss.item(), "train/lr": current_lr, "epoch": epoch},
+                step=global_step,
+            )
 
             if batch_idx % 50 == 0:
-                current_lr = optimizer.param_groups[0]["lr"]
                 print(
                     f"  Epoch {epoch}/{args.epochs} | "
                     f"Step {batch_idx}/{len(train_loader)} | "
@@ -359,6 +459,14 @@ def main():
         print(
             f"\n  Epoch {epoch} 完成 | "
             f"train_loss={avg_train_loss:.4f} | dev_acc={dev_acc:.4f}"
+        )
+        wandb_log(
+            {
+                "epoch/train_loss": avg_train_loss,
+                "epoch/dev_acc": dev_acc,
+                "epoch/best_dev_acc": max(best_dev_acc, dev_acc),
+            },
+            step=global_step,
         )
 
         # 保存最佳模型
@@ -383,6 +491,7 @@ def main():
         # Early stopping
         if not args.no_early_stop and no_improve_count >= patience:
             print(f"\n  Early stop: 连续 {patience} epoch 无提升，终止训练。")
+            wandb_log({"early_stop": True}, step=global_step)
             break
 
     # 保存最后模型
@@ -428,8 +537,28 @@ def main():
         model, _ = load_for_eval(str(best_ckpt))
         model = model.to(device)
         plot_attention_heatmaps(model, tokenizer, heatmap_texts, device, FIG_DIR)
+
+        if wandb_run is not None:
+            try:
+                import wandb
+
+                for png in sorted(FIG_DIR.glob("*.png")):
+                    wandb.log(
+                        {f"heatmap/{png.stem}": wandb.Image(str(png), caption=png.name)},
+                        step=global_step,
+                    )
+            except Exception as e:
+                print(f"[wandb] 热图上传失败: {e}")
     else:
         print("  (无 best.pt，跳过热图生成)")
+
+    wandb_finish(
+        summary={
+            "best_dev_acc": best_dev_acc,
+            "best_epoch": best_epoch,
+            "final_dev_acc": dev_acc,
+        }
+    )
 
     # ---- 自检提示 ----
     print(f"\n运行自检查看是否达标: python eval/run.py")

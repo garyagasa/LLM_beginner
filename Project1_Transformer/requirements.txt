@@ -25,8 +25,9 @@ pandas>=2.0                # DataFrame 操作
 transformers>=4.35         # 仅用于参考 tokenizer API（不调预训练模型）
 tokenizers>=0.14
 
-# ---- 可视化 ----
+# ---- 可视化 & 实验跟踪 ----
 matplotlib>=3.5            # 注意力热图
+wandb>=0.16                # 训练曲线与热图上传（train.py --no-wandb 可关闭）
 
 # ---- 基础 ----
 numpy>=1.23

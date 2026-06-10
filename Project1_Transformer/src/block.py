@@ -4,7 +4,7 @@
     x = x + Attention(LayerNorm(x))
     x = x + FFN(LayerNorm(x))
 """
-
+import torch
 import torch.nn as nn
 
 from src.attention import MultiHeadAttention
@@ -28,11 +28,17 @@ class FeedForward(nn.Module):
         #   nn.Dropout(dropout)
         #   nn.Linear(d_ff, d_model)
         #   nn.Dropout(dropout)
-        raise NotImplementedError("TODO: 实现 FeedForward.__init__ — 约 5 行")
+        self.net = nn.Sequential(
+            nn.Linear(d_model, d_ff),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_ff, d_model),
+            nn.Dropout(dropout)
+        )
 
     def forward(self, x):
         # TODO: return self.net(x)
-        raise NotImplementedError("TODO: 实现 FeedForward.forward — 1 行")
+        return self.net(x)
 
 
 # ================================================================
@@ -63,7 +69,10 @@ class TransformerBlock(nn.Module):
         #   self.ffn = FeedForward(d_model, d_ff, dropout)
         #   self.norm1 = nn.LayerNorm(d_model)    ← attention 前的 LayerNorm
         #   self.norm2 = nn.LayerNorm(d_model)    ← FFN 前的 LayerNorm
-        raise NotImplementedError("TODO: 实现 TransformerBlock.__init__ — 约 4 行")
+        self.attention = MultiHeadAttention(d_model, n_heads, dropout) 
+        self.ffn = FeedForward(d_model, d_ff, dropout)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
         """前向传播。
@@ -83,6 +92,9 @@ class TransformerBlock(nn.Module):
         # TODO: 实现 Pre-norm 的两步 residual
         # x = x + self.attention(self.norm1(x), mask)
         # x = x + self.ffn(self.norm2(x))
-        raise NotImplementedError("TODO: 实现 TransformerBlock.forward — 约 2 行")
+        normed_x = self.norm1(x)
+        x = x + self.attention(normed_x, mask)
+        normed_x = self.norm2(x)
+        x = x + self.ffn(normed_x)
         # ---- 你的代码结束 ----
         return x

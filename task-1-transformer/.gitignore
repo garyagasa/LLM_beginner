@@ -1,8 +1,0 @@
-data/cache/
-data/*.parquet
-ckpt/
-src/__pycache__/
-eval/__pycache__/
-eval/result.json
-*.pyc
-.venv/

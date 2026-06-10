@@ -10,12 +10,6 @@ import os
 import sys
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# 修复 Windows 上部分损坏的系统证书导致 aiohttp import 崩溃的问题
-#   ssl.SSLError: [ASN1: NOT_ENOUGH_DATA] not enough data
-# aiohttp 在模块 import 时就调 ssl.create_default_context()，它会扫 Windows
-# 证书存储；如果有损坏证书直接崩溃。用 certifi 的证书包替换。
-# ---------------------------------------------------------------------------
 try:
     import ssl
     import certifi
@@ -41,8 +35,11 @@ def main():
     except ImportError:
         sys.exit("[错误] 缺少依赖：pip install datasets pyarrow")
 
-    print("正在下载 seamew/ChnSentiCorp ...")
-    ds = load_dataset("seamew/ChnSentiCorp", cache_dir=str(DATA_DIR / "cache"))
+    # seamew/ChnSentiCorp 使用旧式 loading script，datasets>=4.0 已移除支持。
+    # 改用同数据的 Parquet 镜像（与 seamew 版本一致：9600/1200/1200）。
+    dataset_id = "lansinuote/ChnSentiCorp"
+    print(f"正在下载 {dataset_id} ...")
+    ds = load_dataset(dataset_id, cache_dir=str(DATA_DIR / "cache"))
 
     for split in ds.keys():
         out = DATA_DIR / f"{split}.parquet"

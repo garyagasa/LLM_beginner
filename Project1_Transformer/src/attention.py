@@ -44,13 +44,12 @@ def scaled_dot_product_attention(
     # ---- 你的代码开始 ----
     # TODO: 实现上述 4 步；参考上面注释的步骤
 
-    d_k = Q.size(-1)                                              # step 1: 取出 d_k
-    # scores = ...                                                 # step 1: Q @ K^T / sqrt(d_k)，形状 (B, H, T, T)
-    # if mask is not None:                                         # step 2: mask 处理
-    #     scores = ...
-    # attn_weights = ...                                           # step 3: softmax(dim=-1)
-    # output = ...                                                 # step 4: 加权求和
-    raise NotImplementedError("TODO: 实现 scaled_dot_product_attention — 约 6 行")
+    d_k = Q.size(-1)                                             # step 0 取出 d_k
+    scores = Q @ K.transpose(-2, -1) / math.sqrt(d_k)            # step 1: Q @ K^T / sqrt(d_k)，形状 (B, H, T, T)
+    if mask is not None:                                         # step 2: mask 处理
+        scores = scores.masked_fill(mask,float("-inf"))
+    attn_weights = F.softmax(scores, dim=-1)                        # step 3: softmax(dim=-1)
+    output = attn_weights @ V                                     # step 4: 加权求和
     # ---- 你的代码结束 ----
     return output
 
@@ -74,14 +73,21 @@ class MultiHeadAttention(nn.Module):
         """
         super().__init__()
         # TODO: 检查 d_model % n_heads == 0，否则报错
+        if not d_model % n_heads == 0:
+            raise ValueError("d_model must be divisible by n_heads")
         # TODO: 保存 d_model, n_heads, d_k = d_model // n_heads
-        #
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.d_k = d_model // n_heads
         # TODO: 创建 4 个线性投影层（bias=False）：
         #   self.W_q / self.W_k / self.W_v  → Q/K/V 投影 (d_model → d_model)
         #   self.W_o                         → 输出投影 (d_model → d_model)
-        #
+        self.W_q = nn.Linear(d_model, d_model, bias = False)
+        self.W_k = nn.Linear(d_model, d_model, bias = False)
+        self.W_v = nn.Linear(d_model, d_model, bias = False)
+        self.W_o = nn.Linear(d_model, d_model, bias = False)
         # TODO: 创建 Dropout 层
-        raise NotImplementedError("TODO: 实现 MultiHeadAttention.__init__ — 约 10 行")
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
         """前向传播。
@@ -110,5 +116,11 @@ class MultiHeadAttention(nn.Module):
         # attn_out = attn_out.transpose(1, 2).contiguous().view(B, T, self.d_model)
         # output = self.W_o(attn_out)
         # return self.dropout(output)
-        raise NotImplementedError("TODO: 实现 MultiHeadAttention.forward — 约 8 行")
+        Q = self.W_q(x).view(B, T, self.n_heads, self.d_k).transpose(1, 2)
+        K = self.W_k(x).view(B, T, self.n_heads, self.d_k).transpose(1, 2)
+        V = self.W_v(x).view(B, T, self.n_heads, self.d_k).transpose(1, 2)
+        attn_out = scaled_dot_product_attention(Q, K, V, mask)
+        attn_out = attn_out.transpose(1, 2).contiguous().view(B, T, self.d_model)
+        output = self.W_o(attn_out)
+        return self.dropout(output)
         # ---- 你的代码结束 ----
