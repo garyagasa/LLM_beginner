@@ -53,6 +53,13 @@ def parse_args():
     p.add_argument("--d_ff", type=int, default=512)
     p.add_argument("--dropout", type=float, default=0.1)
     p.add_argument("--max_len", type=int, default=200, help="最大序列长度（字符数）")
+    p.add_argument("--pe-type", type=str, default="abs", choices=["abs", "rope"],
+                   help="位置编码：abs=绝对正弦 PE，rope=旋转位置编码（S4）")
+    p.add_argument("--save-best-as", type=str, default="best.pt",
+                   help="最佳模型保存文件名（相对 ckpt/）")
+    # S2 消融
+    p.add_argument("--no-residual", action="store_true", help="去掉 TransformerBlock 的 residual 连接")
+    p.add_argument("--no-layernorm", action="store_true", help="去掉 TransformerBlock 内的 LayerNorm")
     # 训练
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--batch_size", type=int, default=32)
@@ -64,7 +71,7 @@ def parse_args():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--num_workers", type=int, default=2)
-    p.add_argument("--no_early_stop", action="store_true", help="禁用 early stopping")
+    p.add_argument("--no-early-stop", action="store_true", help="禁用 early stopping")
     # wandb
     p.add_argument("--no-wandb", action="store_true", help="禁用 Weights & Biases 日志")
     p.add_argument("--wandb-project", type=str, default="llm-beginner-p1-transformer")
@@ -241,12 +248,15 @@ def plot_attention_heatmaps(model, tokenizer, sentences, device, save_dir):
 
             # Embedding
             x = model.token_embedding(input_ids) * math.sqrt(model.d_model)
-            x = model.position_encoding(x)
+            if getattr(model, "pe_type", "abs") == "abs":
+                x = model.position_encoding(x)
+            else:
+                x = model.embed_dropout(x)
 
             # 逐层到最后一层 attention 前
             for i, block in enumerate(model.blocks):
                 # 手动计算本层 attention 的权重
-                normed = block.norm1(x)
+                normed = block.norm1(x) if block.use_layernorm else x
                 B = normed.size(0)
                 Q = (
                     block.attention.W_q(normed)
@@ -258,6 +268,8 @@ def plot_attention_heatmaps(model, tokenizer, sentences, device, save_dir):
                     .view(B, -1, block.attention.n_heads, block.attention.d_k)
                     .transpose(1, 2)
                 )
+                if model.rotary_emb is not None:
+                    Q, K = model.rotary_emb(Q, K)
 
                 d_k = Q.size(-1)
                 scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(d_k)
@@ -363,6 +375,9 @@ def main():
         max_len=args.max_len,
         dropout=args.dropout,
         pad_idx=tokenizer.pad_id,
+        use_residual=not args.no_residual,
+        use_layernorm=not args.no_layernorm,
+        pe_type=args.pe_type,
     ).to(device)
 
     total_params = sum(p.numel() for p in model.parameters())
@@ -478,7 +493,7 @@ def main():
                 model,
                 tokenizer,
                 CKPT_DIR,
-                "best.pt",
+                args.save_best_as,
                 epoch=epoch,
                 dev_acc=dev_acc,
                 train_loss=avg_train_loss,
@@ -530,7 +545,7 @@ def main():
     heatmap_texts.append((long_row["text"], "long"))
 
     # 加载最佳模型画热图
-    best_ckpt = CKPT_DIR / "best.pt"
+    best_ckpt = CKPT_DIR / args.save_best_as
     if best_ckpt.exists():
         from src.model import load_for_eval
 

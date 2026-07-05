@@ -181,6 +181,56 @@ class PositionalEncoding(nn.Module):
 
 
 # ================================================================
+#  RoPE（Rotary Positional Encoding，S4）
+# ================================================================
+
+def rotate_half(x: torch.Tensor) -> torch.Tensor:
+    """将 head_dim 后半维取反后与前半维拼接，用于 RoPE 旋转。"""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+def apply_rotary_pos_emb(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """对 Q/K 施加 RoPE。形状均为 (B, H, T, d_k)。"""
+    q_embed = q * cos + rotate_half(q) * sin
+    k_embed = k * cos + rotate_half(k) * sin
+    return q_embed, k_embed
+
+
+class RotaryEmbedding(nn.Module):
+    """RoPE 频率缓存；在 attention 内对 Q/K 旋转，替代绝对 PE。"""
+
+    def __init__(self, dim: int, max_len: int = 512, base: float = 10000.0):
+        super().__init__()
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.max_len = max_len
+        self._build_cache(max_len)
+
+    def _build_cache(self, seq_len: int) -> None:
+        t = torch.arange(seq_len, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(t, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("cos_cached", emb.cos()[None, None, :, :], persistent=False)
+        self.register_buffer("sin_cached", emb.sin()[None, None, :, :], persistent=False)
+        self.max_len = seq_len
+
+    def forward(self, q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """q/k: (B, H, T, d_k)"""
+        seq_len = q.size(2)
+        if seq_len > self.max_len:
+            self._build_cache(seq_len)
+        cos = self.cos_cached[:, :, :seq_len, :].to(dtype=q.dtype, device=q.device)
+        sin = self.sin_cached[:, :, :seq_len, :].to(dtype=q.dtype, device=q.device)
+        return apply_rotary_pos_emb(q, k, cos, sin)
+
+
+# ================================================================
 #  分类模型
 # ================================================================
 
@@ -188,7 +238,7 @@ class TransformerClassifier(nn.Module):
     """Transformer encoder 情感分类器。
 
     结构：
-        TokenEmbedding + PositionalEncoding
+        TokenEmbedding + PositionalEncoding（或 RoPE 作用于 Q/K）
         → N × TransformerBlock
         → final LayerNorm → [CLS] pooling → Linear classifier
     """
@@ -204,6 +254,9 @@ class TransformerClassifier(nn.Module):
         max_len: int = 256,
         dropout: float = 0.1,
         pad_idx: int = 0,
+        use_residual: bool = True,
+        use_layernorm: bool = True,
+        pe_type: str = "abs",
     ):
         """
         Args:
@@ -216,32 +269,50 @@ class TransformerClassifier(nn.Module):
             max_len:    最大序列长度
             dropout:    dropout 概率
             pad_idx:    PAD token 的 id
+            pe_type:    位置编码类型，"abs"（绝对 PE）或 "rope"
         """
         super().__init__()
-        # ---- 你的代码开始 ----
-        # TODO: 保存 d_model, max_len, pad_idx 到 self
+        if pe_type not in ("abs", "rope"):
+            raise ValueError(f"pe_type must be 'abs' or 'rope', got {pe_type!r}")
+        if d_model % n_heads != 0:
+            raise ValueError("d_model must be divisible by n_heads")
+
         self.d_model = d_model
         self.max_len = max_len
         self.pad_idx = pad_idx
-        # TODO: 创建子模块：
-        #   self.token_embedding = nn.Embedding(vocab_size, d_model, padding_idx=pad_idx)
-        #   self.position_encoding = PositionalEncoding(d_model, max_len, dropout)
-        #   self.blocks = nn.ModuleList([
-        #       TransformerBlock(d_model, n_heads, d_ff, dropout)
-        #       for _ in range(n_layers)
-        #   ])
-        #   self.final_norm = nn.LayerNorm(d_model)
-        #   self.classifier = nn.Linear(d_model, n_classes)
-        #
-        # TODO: 保存配置 dict 到 self._config，方便 load_for_eval 重建：
-        #   self._config = {"vocab_size": vocab_size, "d_model": d_model, ...}
+        self.pe_type = pe_type
         self.token_embedding = nn.Embedding(vocab_size, d_model, padding_idx=pad_idx)
-        self.position_encoding = PositionalEncoding(d_model, max_len, dropout)
-        self.blocks = nn.ModuleList([TransformerBlock(d_model, n_heads, d_ff, dropout) for _ in range(n_layers)])
+        if pe_type == "abs":
+            self.position_encoding = PositionalEncoding(d_model, max_len, dropout)
+            self.rotary_emb = None
+        else:
+            self.position_encoding = nn.Identity()
+            self.embed_dropout = nn.Dropout(dropout)
+            self.rotary_emb = RotaryEmbedding(d_model // n_heads, max_len)
+        self.blocks = nn.ModuleList([
+            TransformerBlock(
+                d_model, n_heads, d_ff, dropout,
+                use_residual=use_residual,
+                use_layernorm=use_layernorm,
+            )
+            for _ in range(n_layers)
+        ])
         self.final_norm = nn.LayerNorm(d_model)
         self.classifier = nn.Linear(d_model, n_classes)
-        self._config = {"vocab_size": vocab_size, "d_model": d_model, "max_len": max_len, "pad_idx": pad_idx, "n_heads": n_heads, "n_layers": n_layers, "d_ff": d_ff, "n_classes": n_classes, "dropout": dropout}
-        # ---- 你的代码结束 ----
+        self._config = {
+            "vocab_size": vocab_size,
+            "d_model": d_model,
+            "max_len": max_len,
+            "pad_idx": pad_idx,
+            "n_heads": n_heads,
+            "n_layers": n_layers,
+            "d_ff": d_ff,
+            "n_classes": n_classes,
+            "dropout": dropout,
+            "use_residual": use_residual,
+            "use_layernorm": use_layernorm,
+            "pe_type": pe_type,
+        }
 
     def _create_padding_mask(self, input_ids: torch.Tensor) -> torch.Tensor:
         """构建 padding mask：True = PAD 位置需屏蔽。
@@ -287,13 +358,15 @@ class TransformerClassifier(nn.Module):
         if mask is None:
             mask = self._create_padding_mask(input_ids)
         x = self.token_embedding(input_ids) * math.sqrt(self.d_model)
-        x = self.position_encoding(x)
+        if self.pe_type == "abs":
+            x = self.position_encoding(x)
+        else:
+            x = self.embed_dropout(x)
         for block in self.blocks:
-            x = block(x, mask)
+            x = block(x, mask, rotary_emb=self.rotary_emb)
         x = self.final_norm(x)
         cls_repr = x[:, 0, :]
         return self.classifier(cls_repr)
-        # ---- 你的代码结束 ----
 
 
 # ======================================``==========================
@@ -317,7 +390,8 @@ def load_for_eval(ckpt_path: str):
     # TODO: 2. 从 ckpt["tokenizer"] 恢复 CharTokenizer
     tokenizer = CharTokenizer.from_dict(ckpt["tokenizer"])
     # TODO: 3. 从 ckpt["config"] 取出配置，重建 TransformerClassifier
-    config = ckpt["config"]
+    config = dict(ckpt["config"])
+    config.setdefault("pe_type", "abs")
     model = TransformerClassifier(**config)
     # TODO: 4. model.load_state_dict(ckpt["model_state_dict"])
     model.load_state_dict(ckpt["model_state_dict"])

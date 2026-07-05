@@ -89,12 +89,18 @@ class MultiHeadAttention(nn.Module):
         # TODO: 创建 Dropout 层
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        rotary_emb=None,
+    ) -> torch.Tensor:
         """前向传播。
 
         Args:
             x:    (B, T, d_model)
             mask: 可选 attention mask，True = 屏蔽
+            rotary_emb: 可选 RoPE 模块，对 Q/K 施加旋转位置编码
 
         Returns:
             (B, T, d_model)
@@ -119,6 +125,8 @@ class MultiHeadAttention(nn.Module):
         Q = self.W_q(x).view(B, T, self.n_heads, self.d_k).transpose(1, 2)
         K = self.W_k(x).view(B, T, self.n_heads, self.d_k).transpose(1, 2)
         V = self.W_v(x).view(B, T, self.n_heads, self.d_k).transpose(1, 2)
+        if rotary_emb is not None:
+            Q, K = rotary_emb(Q, K)
         attn_out = scaled_dot_product_attention(Q, K, V, mask)
         attn_out = attn_out.transpose(1, 2).contiguous().view(B, T, self.d_model)
         output = self.W_o(attn_out)
