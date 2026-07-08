@@ -10,3 +10,4 @@ eval/result.json
 *.pyc
 .venv/
 wandb/
+实验报告模板.md

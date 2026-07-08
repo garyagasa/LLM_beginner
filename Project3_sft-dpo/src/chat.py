@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List
 
 import torch
@@ -17,54 +18,79 @@ import torch
 IM_START = "<|im_start|>"
 IM_END = "<|" + "im_end" + "|>"  # Qwen2.5 对话结束符
 
+DEFAULT_TOKENIZER_PATH = Path(__file__).resolve().parents[1] / "models" / "Qwen2.5-0.5B"
+
 
 def format_messages(messages: List[dict]) -> str:
-    """应用 Qwen chat template，拼接多轮对话。
-
-    格式示例（单轮）：
-        <|im_start|>user
-        你好
-        <|im_start|>assistant
-        你好！很高兴见到你。
-
-    Args:
-        messages: 按时间顺序的 role/content 列表
-
-    Returns:
-        完整 prompt 字符串（含最后一个 assistant turn；训练时通常保留完整对话）
-
-    实现步骤：
-        1. 遍历 messages，按 role 拼接 IM_START + role + "\\n" + content + IM_END + "\\n"
-        2. 若无 system 消息，可选在开头加默认 system（MOSS 数据通常已有 system）
-        3. 参考 transformers 的 Qwen2Tokenizer.apply_chat_template(..., tokenize=False)
-    """
-    # ---- 你的代码开始 ----
-    # TODO: 拼接 Qwen chat template
-    raise NotImplementedError("TODO: 实现 format_messages")
-    # ---- 你的代码结束 ----
+    """应用 Qwen chat template，拼接多轮对话。"""
+    parts: list[str] = []
+    for msg in messages:
+        role = msg["role"]
+        content = msg["content"]
+        parts.append(f"{IM_START}{role}\n{content}{IM_END}\n")
+    return "".join(parts)
 
 
-def build_labels(input_ids: torch.Tensor, messages: List[dict]) -> torch.Tensor:
-    """构造 SFT 用的 labels：只对 assistant turn 计算 loss。
+def _format_turn(msg: dict) -> str:
+    return f"{IM_START}{msg['role']}\n{msg['content']}{IM_END}\n"
 
-    Args:
-        input_ids: shape (seq_len,) 或 (1, seq_len)，tokenize(format_messages(messages)) 的结果
-        messages:  与 format_messages 相同的 messages 列表
 
-    Returns:
-        labels: 与 input_ids 同 shape；不参与 loss 的位置填 -100
+def _get_tokenizer(tokenizer=None):
+    if tokenizer is not None:
+        return tokenizer
+    from transformers import AutoTokenizer
 
-    实现步骤：
-        1. 对每个 turn 单独 tokenize「从该 turn 开头到 turn 结束」的片段，定位在完整序列中的 span
-        2. user / system turn 及 IM_START/IM_END 控制符 → labels 填 -100
-        3. assistant turn 的正文 token → 保留 input_ids 对应 id（可多轮 assistant 都参与）
-        4. 推荐：逐 turn 用 tokenizer 对齐，避免纯字符串 find 在中文/空格下错位
+    return AutoTokenizer.from_pretrained(str(DEFAULT_TOKENIZER_PATH))
 
-    提示：
-        - eval 期望 mask 比例在 20%-90%（user/system 全 -100）
-        - labels 通常右移一位做 next-token prediction，也可  eval 只检查 shape 与 mask 比例
-    """
-    # ---- 你的代码开始 ----
-    # TODO: 构造 labels，非 assistant 位置填 -100
-    raise NotImplementedError("TODO: 实现 build_labels")
-    # ---- 你的代码结束 ----
+
+def build_labels(
+    input_ids: torch.Tensor,
+    messages: List[dict],
+    tokenizer=None,
+    max_length: int | None = None,
+) -> torch.Tensor:
+    """构造 SFT 用的 labels：只对 assistant turn 的正文计算 loss。"""
+    if input_ids.dim() == 2:
+        input_ids = input_ids.squeeze(0)
+
+    labels = torch.full_like(input_ids, -100)
+    text = format_messages(messages)
+    tokenizer = _get_tokenizer(tokenizer)
+
+    encode_kwargs: dict = {
+        "return_tensors": "pt",
+        "return_offsets_mapping": True,
+    }
+    if max_length is not None:
+        encode_kwargs["truncation"] = True
+        encode_kwargs["max_length"] = max_length
+
+    encoded = tokenizer(text, **encode_kwargs)
+    offsets = encoded.offset_mapping[0]
+    seq_len = input_ids.size(0)
+
+    pos = 0
+    for msg in messages:
+        turn = _format_turn(msg)
+        turn_start = pos
+        turn_end = pos + len(turn)
+        pos = turn_end
+
+        if msg["role"] != "assistant":
+            continue
+
+        header_len = len(f"{IM_START}{msg['role']}\n")
+        footer_len = len(f"{IM_END}\n")
+        content_start = turn_start + header_len
+        content_end = turn_end - footer_len
+
+        for i, span in enumerate(offsets):
+            if i >= seq_len:
+                break
+            if span is None:
+                continue
+            char_start, char_end = span
+            if char_start >= content_start and char_end <= content_end:
+                labels[i] = input_ids[i]
+
+    return labels

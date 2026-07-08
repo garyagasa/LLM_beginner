@@ -17,18 +17,25 @@ def _sequence_log_probs(
     labels: torch.Tensor,
     attention_mask: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """对 labels 位置计算平均 log prob（labels == -100 的位置跳过）。
+    """对 labels 位置计算平均 log prob（labels == -100 的位置跳过）。"""
+    shift_logits = logits[..., :-1, :].contiguous()
+    shift_labels = labels[..., 1:].contiguous()
 
-    Args:
-        logits: (B, T, V)
-        labels: (B, T)，-100 为 mask
-        attention_mask: 可选 (B, T)
+    log_probs = F.log_softmax(shift_logits, dim=-1)
 
-    Returns:
-        (B,) 每条样本的平均 log prob
-    """
-    # TODO: shift logits/labels 做 next-token prediction，gather 对应 token 的 log prob
-    raise NotImplementedError("TODO: 实现 _sequence_log_probs")
+    mask = shift_labels != -100
+    if attention_mask is not None:
+        shift_mask = attention_mask[..., 1:].contiguous().bool()
+        mask = mask & shift_mask
+
+    safe_labels = shift_labels.clone()
+    safe_labels[~mask] = 0
+
+    token_log_probs = log_probs.gather(-1, safe_labels.unsqueeze(-1)).squeeze(-1)
+    token_log_probs = token_log_probs * mask.float()
+
+    denom = mask.sum(dim=-1).clamp(min=1)
+    return token_log_probs.sum(dim=-1) / denom
 
 
 def dpo_loss(
@@ -38,21 +45,14 @@ def dpo_loss(
     ref_rejected_logps: torch.Tensor,
     beta: float = 0.1,
 ) -> tuple[torch.Tensor, dict]:
-    """计算 DPO loss 与辅助指标。
+    """计算 DPO loss 与辅助指标。"""
+    pi_logratios = policy_chosen_logps - policy_rejected_logps
+    ref_logratios = ref_chosen_logps - ref_rejected_logps
+    logits = beta * (pi_logratios - ref_logratios)
+    loss = -F.logsigmoid(logits).mean()
 
-    Args:
-        *_logps: shape (B,)，policy / ref 在 chosen/rejected 上的序列 log prob
-        beta: DPO 温度
-
-    Returns:
-        loss: 标量
-        metrics: {"reward_margin": ..., "accuracy": ...} 等
-    """
-    # ---- 你的代码开始 ----
-    # TODO:
-    #   pi_logratios = policy_chosen_logps - policy_rejected_logps
-    #   ref_logratios = ref_chosen_logps - ref_rejected_logps
-    #   logits = beta * (pi_logratios - ref_logratios)
-    #   loss = -F.logsigmoid(logits).mean()
-    raise NotImplementedError("TODO: 实现 dpo_loss")
-    # ---- 你的代码结束 ----
+    metrics = {
+        "reward_margin": (policy_chosen_logps - policy_rejected_logps).mean().item(),
+        "accuracy": (logits > 0).float().mean().item(),
+    }
+    return loss, metrics

@@ -17,7 +17,6 @@ from typing import Iterable, List
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class LoRALinear(nn.Module):
@@ -31,15 +30,23 @@ class LoRALinear(nn.Module):
 
     def __init__(self, base: nn.Linear, r: int, alpha: float):
         super().__init__()
-        # TODO: 保存 base、r、scaling；创建 lora_A (in_features × r) 与 lora_B (r × out_features)
-        # TODO: 初始化 lora_A 用 kaiming_uniform_，lora_B 用 zeros_
-        # TODO: 冻结 base.weight 和 base.bias（requires_grad=False）
-        raise NotImplementedError("TODO: 实现 LoRALinear.__init__")
+        self.base = base
+        self.r = r
+        self.scaling = alpha / r
+
+        device = base.weight.device
+        dtype = base.weight.dtype
+        self.lora_A = nn.Parameter(torch.empty(base.in_features, r, device=device, dtype=dtype))
+        self.lora_B = nn.Parameter(torch.empty(r, base.out_features, device=device, dtype=dtype))
+        nn.init.kaiming_uniform_(self.lora_A)
+        nn.init.zeros_(self.lora_B)
+
+        self.base.weight.requires_grad = False
+        if self.base.bias is not None:
+            self.base.bias.requires_grad = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # TODO: return base(x) + scaling * (x @ lora_A @ lora_B)
-        # 提示：可用 F.linear(x, lora_A.T) 等价于 x @ lora_A
-        raise NotImplementedError("TODO: 实现 LoRALinear.forward")
+        return self.base(x) + self.scaling * (x @ self.lora_A @ self.lora_B)
 
     @property
     def weight(self):
@@ -56,58 +63,69 @@ def _module_name_matches(name: str, target_modules: Iterable[str]) -> bool:
     return any(name.endswith(f".{t}") or name == t for t in target_modules)
 
 
+def _get_parent_and_child(model: nn.Module, name: str) -> tuple[nn.Module, str]:
+    parts = name.split(".")
+    parent = model
+    for part in parts[:-1]:
+        parent = getattr(parent, part)
+    return parent, parts[-1]
+
+
 def inject_lora(
     model: nn.Module,
     target_modules: List[str],
     r: int = 8,
     alpha: float = 16,
 ) -> nn.Module:
-    """在 model 中把匹配的 nn.Linear 替换为 LoRALinear。
+    """在 model 中把匹配的 nn.Linear 替换为 LoRALinear。"""
+    to_replace: list[str] = []
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear) and _module_name_matches(name, target_modules):
+            to_replace.append(name)
 
-    Args:
-        model: HuggingFace CausalLM（如 Qwen2.5-0.5B）
-        target_modules: 要注入的模块名后缀，如 ["q_proj", "v_proj"]
-        r: LoRA rank
-        alpha: LoRA scaling
+    for name in to_replace:
+        parent, child_name = _get_parent_and_child(model, name)
+        old_linear = getattr(parent, child_name)
+        setattr(parent, child_name, LoRALinear(old_linear, r, alpha))
 
-    Returns:
-        注入 LoRA 后的 model（原地修改）
+    for name, param in model.named_parameters():
+        param.requires_grad = "lora_" in name
 
-    实现步骤：
-        1. 遍历 model.named_modules()，找到 name 匹配 target_modules 的 nn.Linear
-        2. 用 LoRALinear(base, r, alpha) 替换（通过 parent  setattr）
-        3. 确保只有 LoRA 参数 requires_grad=True
-    """
-    # ---- 你的代码开始 ----
-    # TODO: 遍历并替换 Linear 层
-    raise NotImplementedError("TODO: 实现 inject_lora")
-    # ---- 你的代码结束 ----
     return model
 
 
 def merge_lora(model: nn.Module) -> nn.Module:
-    """将 LoRA 权重合并回原 Linear，并恢复为普通 nn.Linear。
+    """将 LoRA 权重合并回原 Linear，并恢复为普通 nn.Linear。"""
+    for name, module in list(model.named_modules()):
+        if not isinstance(module, LoRALinear):
+            continue
 
-    合并公式：W_merged = W + scaling * (lora_A @ lora_B).T
-    （注意 Linear 权重形状为 out_features × in_features）
+        parent, child_name = _get_parent_and_child(model, name)
 
-    Returns:
-        合并后的 model（原地修改）
-    """
-    # ---- 你的代码开始 ----
-    # TODO: 遍历 LoRALinear，计算 merged weight，替换回 nn.Linear
-    raise NotImplementedError("TODO: 实现 merge_lora")
-    # ---- 你的代码结束 ----
+        delta = module.scaling * (module.lora_A @ module.lora_B).T
+        merged_weight = module.base.weight.data + delta
+
+        new_linear = nn.Linear(
+            module.base.in_features,
+            module.base.out_features,
+            bias=module.base.bias is not None,
+            device=module.base.weight.device,
+            dtype=module.base.weight.dtype,
+        )
+        new_linear.weight.data = merged_weight
+        if module.base.bias is not None:
+            new_linear.bias.data = module.base.bias.data
+
+        setattr(parent, child_name, new_linear)
+
     return model
 
 
 def lora_state_dict(model: nn.Module) -> dict:
     """只导出 LoRA 相关参数（用于保存 ckpt/sft 与 ckpt/dpo）。"""
-    # TODO: 收集 name 中含 "lora_" 且 requires_grad 的参数
-    raise NotImplementedError("TODO: 实现 lora_state_dict")
+    return {k: v for k, v in model.state_dict().items() if "lora_" in k}
 
 
 def load_lora_state_dict(model: nn.Module, state_dict: dict) -> None:
     """加载 LoRA 权重到已 inject_lora 的 model。"""
-    # TODO: model.load_state_dict(state_dict, strict=False)
-    raise NotImplementedError("TODO: 实现 load_lora_state_dict")
+    model.load_state_dict(state_dict, strict=False)

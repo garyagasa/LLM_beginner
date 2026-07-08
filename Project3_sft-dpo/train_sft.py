@@ -1,32 +1,24 @@
-"""M3：SFT 训练 —— MOSS 数据 + LoRA + loss masking。
-
-用法：
-    python data/download.py                          # 下载基座模型 + 查看数据获取命令
-    # 下载 MOSS SFT 数据（见 README）
-    python train_sft.py                              # 默认配置
-    python train_sft.py --max-samples 10000 --epochs 1
-    python train_sft.py --no-wandb
-
-输出：
-    ckpt/sft/          LoRA 权重（lora_state_dict）
-"""
+"""M3：SFT 训练 —— MOSS 数据 + LoRA + loss masking。"""
 
 from __future__ import annotations
 
 import argparse
 import sys
+from functools import partial
 from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from tqdm import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
 from src.lora import inject_lora, lora_state_dict
-from src.dataset import SFTDataset
+from src.dataset import SFTDataset, pad_collate
+from src.wandb_utils import init_wandb, wandb_log, wandb_finish
 
 DEFAULT_MODEL = ROOT / "models" / "Qwen2.5-0.5B"
 DEFAULT_CKPT = ROOT / "ckpt" / "sft"
@@ -49,25 +41,66 @@ def parse_args():
     p.add_argument("--lr", type=float, default=2e-4)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    p.add_argument("--no-wandb", action="store_true")
+    p.add_argument("--log-every", type=int, default=10, help="每 N step 记录一次 wandb")
+    p.add_argument("--no-wandb", action="store_true", help="禁用 Weights & Biases 日志")
     p.add_argument("--wandb-project", type=str, default="llm-beginner-p3-sft")
+    p.add_argument("--wandb-run-name", type=str, default=None, help="run 名称，默认自动生成")
+    p.add_argument("--wandb-entity", type=str, default=None, help="wandb 团队/用户名，默认用已登录账号")
     return p.parse_args()
 
 
-def train_one_epoch(model, loader, optimizer, device, grad_accum: int) -> float:
-    """单个 epoch 的 SFT 训练循环。"""
+def train_one_epoch(
+    model,
+    loader,
+    optimizer,
+    device,
+    grad_accum: int,
+    *,
+    epoch: int = 1,
+    log_every: int = 10,
+    global_step: int = 0,
+    lr: float = 2e-4,
+) -> tuple[float, int]:
+    """单个 epoch 的 SFT 训练循环。返回 (avg_loss, 更新后的 global_step)。"""
     model.train()
     total_loss = 0.0
+    num_steps = 0
     optimizer.zero_grad()
 
-    # TODO: 遍历 DataLoader
-    #   1. batch 移到 device
-    #   2. outputs = model(input_ids=..., attention_mask=..., labels=labels)
-    #   3. loss = outputs.loss / grad_accum；backward
-    #   4. 每 grad_accum 步 optimizer.step() + zero_grad
-    raise NotImplementedError("TODO: 实现 train_one_epoch")
+    progress = tqdm(loader, desc=f"SFT epoch {epoch}")
+    for step, batch in enumerate(progress):
+        input_ids = batch["input_ids"].to(device)
+        attention_mask = batch["attention_mask"].to(device)
+        labels = batch["labels"].to(device)
 
-    return total_loss / max(len(loader), 1)
+        outputs = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=labels,
+        )
+        loss = outputs.loss / grad_accum
+        loss.backward()
+
+        if (step + 1) % grad_accum == 0 or (step + 1) == len(loader):
+            optimizer.step()
+            optimizer.zero_grad()
+            global_step += 1
+            step_loss = loss.item() * grad_accum
+            total_loss += step_loss
+            num_steps += 1
+            progress.set_postfix(loss=f"{step_loss:.4f}")
+
+            if global_step % log_every == 0:
+                wandb_log(
+                    {
+                        "train/loss": step_loss,
+                        "train/epoch": epoch,
+                        "train/lr": lr,
+                    },
+                    step=global_step,
+                )
+
+    return total_loss / max(num_steps, 1), global_step
 
 
 def main():
@@ -77,27 +110,78 @@ def main():
     if not Path(args.model).exists():
         sys.exit(f"[错误] 基座模型不存在: {args.model}\n请先运行: python data/download.py")
 
-    # TODO: 加载 tokenizer 与 model
-    # from transformers import AutoModelForCausalLM, AutoTokenizer
-    # tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
-    # model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.bfloat16, device_map=args.device)
+    dtype = torch.bfloat16 if (
+        args.device.startswith("cuda")
+        and torch.cuda.is_available()
+        and getattr(torch.cuda, "is_bf16_supported", lambda: False)()
+    ) else torch.float32
+    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
 
-    # TODO: inject_lora
-    # target = [m.strip() for m in args.target_modules.split(",")]
-    # inject_lora(model, target_modules=target, r=args.lora_r, alpha=args.lora_alpha)
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model,
+        torch_dtype=dtype,
+        trust_remote_code=True,
+    )
+    model.to(args.device)
 
-    # TODO: SFTDataset + DataLoader
-    # dataset = SFTDataset(args.data, tokenizer=tokenizer, max_length=args.max_length, max_samples=args.max_samples)
-    # loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    target = [m.strip() for m in args.target_modules.split(",")]
+    inject_lora(model, target_modules=target, r=args.lora_r, alpha=args.lora_alpha)
 
-    # TODO: optimizer 只传 requires_grad=True 的参数
-    # optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
+    dataset = SFTDataset(
+        args.data,
+        tokenizer=tokenizer,
+        max_length=args.max_length,
+        max_samples=args.max_samples,
+    )
+    collate = partial(pad_collate, pad_token_id=tokenizer.pad_token_id)
+    loader = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        collate_fn=collate,
+    )
 
-    # TODO: 训练循环 + 保存 ckpt
-    # Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
-    # torch.save(lora_state_dict(model), Path(args.ckpt_dir) / "lora.pt")
+    optimizer = AdamW(
+        (p for p in model.parameters() if p.requires_grad),
+        lr=args.lr,
+    )
 
-    print("TODO: 完成 train_sft.py 后可运行 python eval/run.py 检查 lora_param_count / loss_masking / sft_vs_base")
+    init_wandb(args)
+
+    Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
+    global_step = 0
+    best_loss = float("inf")
+    avg_loss = 0.0
+
+    for epoch in range(1, args.epochs + 1):
+        avg_loss, global_step = train_one_epoch(
+            model,
+            loader,
+            optimizer,
+            args.device,
+            args.grad_accum,
+            epoch=epoch,
+            log_every=args.log_every,
+            global_step=global_step,
+            lr=args.lr,
+        )
+        wandb_log({"train/epoch_loss": avg_loss, "train/epoch": epoch}, step=global_step)
+        best_loss = min(best_loss, avg_loss)
+        print(f"[SFT] epoch {epoch} avg_loss={avg_loss:.4f}")
+
+    ckpt_path = Path(args.ckpt_dir) / "lora.pt"
+    torch.save(lora_state_dict(model), ckpt_path)
+    print(f"[SFT] 已保存 LoRA 权重到 {ckpt_path}")
+
+    wandb_finish(
+        summary={
+            "final_train_loss": avg_loss,
+            "best_train_loss": best_loss,
+            "total_steps": global_step,
+        }
+    )
 
 
 if __name__ == "__main__":
