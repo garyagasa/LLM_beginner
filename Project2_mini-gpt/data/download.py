@@ -4,7 +4,9 @@
   python data/download.py                         # 默认唐诗（quick-start）
   python data/download.py --dataset poetry        # 唐诗（quick-start）
   python data/download.py --dataset tinystories   # TinyStories（英文故事语料，约百 MB 量级）
-  python data/download.py --dataset skypile       # SkyPile 子集提示（需手动抽样）
+  python data/download.py --dataset skypile       # 默认 10 万条（约 280MB）
+  python data/download.py --dataset skypile --num-samples 5000000   # 500 万条（约 13GB）
+  python data/download.py --dataset skypile --max-local           # 尽量下满本地可用空间（仍非全量 620GB）
 """
 import argparse
 import json
@@ -15,6 +17,9 @@ from pathlib import Path
 
 DATA_DIR = Path(__file__).parent
 ROOT = DATA_DIR.parent.parent  # llm-beginner 仓库根
+SKYPILE_FULL_GB = 620          # 官方全量约 620GB / 150B tokens
+BYTES_PER_SAMPLE = 2680        # 经验值：100k 条约 268MB
+RESERVE_GB = 30                # 留给 ckpt / 缓存
 
 
 def write_dataset_info(dataset, ppl_threshold, extra=None):
@@ -86,28 +91,102 @@ def get_tinystories():
     print("已额外生成 train.txt / dev.txt，供 eval/run.py 计算困惑度。")
 
 
-def get_skypile():
-    print("SkyPile-150B 体量大，建议手动选 streaming 子集并显式切出 train/dev：")
-    print("  pip install datasets")
-    print("  python -c \"from datasets import load_dataset; "
-          "ds = load_dataset('Skywork/SkyPile-150B', split='train', streaming=True); "
-          "import itertools; "
-          "f=open('data/train.txt','w',encoding='utf-8'); "
-          "[f.write(str(x.get('text',''))+'\\n\\n') for x in itertools.islice(ds, 10000)]; "
-          "f.close()\"")
-    print("  # 再从 train.txt 尾部切出 data/dev.txt，并写入 data/dataset_info.json")
-    print("\n或用 ModelScope：")
-    print("  pip install modelscope")
-    print("  modelscope download --dataset 'Skywork/SkyPile-150B' --local_dir ./data/cache")
+def _free_gb(path: Path) -> float:
+    return shutil.disk_usage(path).free / (1024 ** 3)
+
+
+def _estimate_skypile_samples(num_samples: int | None, max_gb: float | None, max_local: bool) -> int:
+    if max_local:
+        avail = _free_gb(DATA_DIR) - RESERVE_GB
+        cap = min(avail, SKYPILE_FULL_GB - 1)
+        if cap < SKYPILE_FULL_GB:
+            print(f"[提示] SkyPile 全量约 {SKYPILE_FULL_GB}GB，当前可用 {avail:.0f}GB（已预留 {RESERVE_GB}GB）")
+            print(f"       无法下载全量，将按磁盘上限抽取约 {cap:.0f}GB 子集\n")
+        else:
+            print(f"[提示] 将尝试下载接近全量（约 {SKYPILE_FULL_GB}GB），耗时可能数小时\n")
+        max_gb = max(1.0, cap)
+    if max_gb is not None:
+        est = int(max_gb * (1024 ** 3) / BYTES_PER_SAMPLE)
+        print(f"[auto] 目标体积约 {max_gb:.1f}GB -> 预计 {est:,} 条")
+        return est
+    return num_samples or 100000
+
+
+def get_skypile(
+    num_samples: int | None = 100000,
+    dev_ratio: float = 0.1,
+    max_gb: float | None = None,
+    max_local: bool = False,
+):
+    """SkyPile-150B 全量约 620GB；用 streaming 抽子集，直接流式写入 train/dev。"""
+    if "HF_ENDPOINT" not in os.environ:
+        print("[提示] 下载慢可设 HF_ENDPOINT=https://hf-mirror.com\n")
+    try:
+        from datasets import load_dataset
+    except ImportError:
+        sys.exit("[错误] pip install datasets")
+
+    num_samples = _estimate_skypile_samples(num_samples, max_gb, max_local)
+    train_n = int(num_samples * (1 - dev_ratio))
+    train_path = DATA_DIR / "train.txt"
+    dev_path = DATA_DIR / "dev.txt"
+
+    print(f"streaming 下载 Skywork/SkyPile-150B 前 {num_samples:,} 条 "
+          f"（train≈{train_n:,}，dev≈{num_samples - train_n:,}）...")
+
+    ds = load_dataset("Skywork/SkyPile-150B", split="train", streaming=True)
+    valid = 0
+    with train_path.open("w", encoding="utf-8", newline="\n") as tf, \
+         dev_path.open("w", encoding="utf-8", newline="\n") as df:
+        for i, row in enumerate(ds):
+            if i >= num_samples:
+                break
+            text = str(row.get("text", "")).strip()
+            if not text:
+                continue
+            out = tf if valid < train_n else df
+            out.write(text)
+            out.write("\n\n")
+            valid += 1
+            if valid % 10000 == 0:
+                print(f"  已写入 {valid:,}/{num_samples:,} 条 "
+                      f"（train {min(valid, train_n):,} / dev {max(0, valid - train_n):,}）...")
+
+    if valid == 0:
+        sys.exit("[错误] 未获取到任何文本，请检查网络或 HF 镜像设置")
+
+    train_mb = train_path.stat().st_size / (1024 ** 2)
+    dev_mb = dev_path.stat().st_size / (1024 ** 2)
+    extra = {
+        "note": f"SkyPile 子集 {valid:,} 条（全量约 {SKYPILE_FULL_GB}GB / 2.33 亿网页）",
+        "num_samples": valid,
+    }
+    write_dataset_info("skypile", ppl_threshold=100, extra=extra)
+    print(f"完成：有效 {valid:,} 条 | train {train_mb:.1f}MB + dev {dev_mb:.1f}MB -> {DATA_DIR}")
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", choices=["poetry", "tinystories", "skypile"],
                     default="poetry")
+    ap.add_argument("--num-samples", type=int, default=None,
+                    help="skypile 抽样条数（默认 100000；与 --max-gb/--max-local 互斥时以后者为准）")
+    ap.add_argument("--max-gb", type=float, default=None,
+                    help="skypile 目标体积上限（GB），自动换算条数")
+    ap.add_argument("--max-local", action="store_true",
+                    help="skypile 尽量用满本地可用磁盘（仍受 620GB 全量上限约束）")
+    ap.add_argument("--dev-ratio", type=float, default=0.1,
+                    help="dev 集占比（默认 0.1）")
     args = ap.parse_args()
-    {"poetry": get_poetry, "tinystories": get_tinystories,
-     "skypile": get_skypile}[args.dataset]()
+    if args.dataset == "skypile":
+        get_skypile(
+            num_samples=args.num_samples or 100000,
+            dev_ratio=args.dev_ratio,
+            max_gb=args.max_gb,
+            max_local=args.max_local,
+        )
+    else:
+        {"poetry": get_poetry, "tinystories": get_tinystories}[args.dataset]()
 
 
 if __name__ == "__main__":

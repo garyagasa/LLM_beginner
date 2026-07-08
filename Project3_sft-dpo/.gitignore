@@ -1,6 +1,7 @@
 data/cache/
-data/*.parquet
-data/*.jsonl
+data/**/*.jsonl
+data/**/*.jsonl.zip
+data/**/*.parquet
 ckpt/
 models/
 src/__pycache__/
@@ -8,3 +9,4 @@ eval/__pycache__/
 eval/result.json
 *.pyc
 .venv/
+wandb/
