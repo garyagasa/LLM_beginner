@@ -17,7 +17,10 @@ def _sequence_log_probs(
     labels: torch.Tensor,
     attention_mask: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """对 labels 位置计算平均 log prob（labels == -100 的位置跳过）。"""
+    """对 labels 位置计算序列 log prob 之和（labels == -100 的位置跳过）。
+
+    标准 DPO 使用 token logprob 求和，而非按长度平均；平均化会扭曲长短样本的梯度。
+    """
     shift_logits = logits[..., :-1, :].contiguous()
     shift_labels = labels[..., 1:].contiguous()
 
@@ -34,8 +37,7 @@ def _sequence_log_probs(
     token_log_probs = log_probs.gather(-1, safe_labels.unsqueeze(-1)).squeeze(-1)
     token_log_probs = token_log_probs * mask.float()
 
-    denom = mask.sum(dim=-1).clamp(min=1)
-    return token_log_probs.sum(dim=-1) / denom
+    return token_log_probs.sum(dim=-1)
 
 
 def dpo_loss(

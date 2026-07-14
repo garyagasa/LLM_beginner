@@ -37,7 +37,7 @@ def parse_args():
     p.add_argument("--ckpt-dir", type=str, default=str(DEFAULT_DPO_CKPT))
     p.add_argument("--beta", type=float, default=0.1, help="DPO 温度 β")
     p.add_argument("--max-samples", type=int, default=5000)
-    p.add_argument("--max-length", type=int, default=2048)
+    p.add_argument("--max-length", type=int, default=1024)
     p.add_argument("--lora-r", type=int, default=8)
     p.add_argument("--lora-alpha", type=float, default=16)
     p.add_argument("--target-modules", type=str, default="q_proj,v_proj")
@@ -173,6 +173,7 @@ def main():
         trust_remote_code=True,
     )
     model.to(args.device)
+    model.gradient_checkpointing_enable()
 
     target = [m.strip() for m in args.target_modules.split(",")]
     inject_lora(model, target_modules=target, r=args.lora_r, alpha=args.lora_alpha)
