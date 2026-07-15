@@ -1,0 +1,6 @@
+runs/
+eval/result.json
+data/toy-repo/
+data/tasks.json
+src/__pycache__/
+__pycache__/

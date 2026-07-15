@@ -1,0 +1,9 @@
+{
+  "max_attempts": 3,
+  "command_timeout_seconds": 30,
+  "allowed_commands": ["python", "python3", "pytest"],
+  "readable_globs": ["**/*.py", "**/*.md", "**/*.txt", "**/*.json"],
+  "writable_globs": ["**/*.py", "**/*.md"],
+  "max_output_chars": 12000
+}
+

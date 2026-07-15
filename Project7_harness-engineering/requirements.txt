@@ -1,0 +1,4 @@
+pytest>=7.0
+# 第二阶段接入本地 Qwen / Ollama 的 OpenAI 兼容接口时启用：
+# openai>=1.30
+
