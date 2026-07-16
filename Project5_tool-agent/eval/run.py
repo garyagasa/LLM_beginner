@@ -46,19 +46,22 @@ def test_tools_individual():
     """每个工具单元测试。"""
     results = {}
     try:
-        from src.tools import calculator, python_sandbox, file_search, wiki
+        from src.tools import (
+            calculator, python_sandbox, file_search, wiki, conan_wiki,
+        )
     except ImportError as e:
         return {"test": "tools_individual", "pass": False,
                 "error": f"工具导入失败：{e}"}
 
     # (工具名, 模块, 调用参数, 预期子串, 是否依赖网络)：
-    # expected=None 表示只检查响应长度 > 50（如 wiki 网络回包）；
+    # expected=None 表示只检查响应长度 > 50（wiki / conan_wiki 网络回包）；
     # network=True 的工具若抛异常按“跳过”处理（多半是离线/被墙），不拖累其余工具判定。
     checks = [
         ("calculator",     calculator,     {"expression": "2 + 3 * 4"},                  "14",        False),
         ("python_sandbox", python_sandbox, {"code": "print(sum(range(10)))"},            "45",        False),
         ("file_search",    file_search,    {"pattern": "README.md", "dir": str(ROOT)},   "README.md", False),
-        ("wiki",           wiki,           {"query": "Alan Turing"},                     None,        True),
+        ("wiki",           wiki,           {"query": "柯南·道尔"},                        None,        True),
+        ("conan_wiki",     conan_wiki,     {"query": "灰原哀"},                           None,        True),
     ]
     network_skipped = []
     for name, mod, args, expected, network in checks:

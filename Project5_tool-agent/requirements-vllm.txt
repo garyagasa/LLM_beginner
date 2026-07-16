@@ -1,0 +1,11 @@
+# vLLM 推理环境专用（conda 环境名建议：vllm_pj5）
+# 本机驱动 CUDA 12.6 → 必须用 cu124/cu126 的 torch，不要用默认 cu130。
+#
+# 安装顺序见 scripts/setup_vllm_env.sh：
+#   1) torch（cu126/cu124 index）
+#   2) 本文件（钉住 vllm + transformers，避免被 pip 拉到 transformers 5.x）
+
+vllm==0.8.5
+transformers==4.51.3
+tokenizers>=0.20,<0.22
+huggingface-hub>=0.30,<1.0

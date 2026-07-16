@@ -1,8 +1,12 @@
-openai>=1.30          # 用作 OpenAI 兼容客户端调本地模型
+# Agent 客户端依赖（conda 环境建议：llm_pj5）
+# 不含 vLLM / PyTorch —— 推理服务请用独立环境，见 scripts/setup_vllm_env.sh
+
+openai>=1.30
 requests>=2.31
 wikipedia-api>=0.6
 pydantic>=2.0
 numpy>=1.23
 tqdm>=4.65
-# 可选对照：
+
+# 可选：M4 对照框架
 # qwen-agent>=0.0.10
