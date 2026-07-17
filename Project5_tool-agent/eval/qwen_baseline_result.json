@@ -1,0 +1,645 @@
+{
+  "qwen_agent": {
+    "label": "Qwen-Agent",
+    "rate": 0.893,
+    "success": 25,
+    "n": 28,
+    "details": [
+      {
+        "id": 1,
+        "success": true,
+        "final_answer_preview": "17岁的真实年龄减去7岁的外表年龄得到的差是10。4869乘以这个年龄差（10）等于48690。",
+        "expected_answer_contains": [
+          "10",
+          "48690"
+        ]
+      },
+      {
+        "id": 2,
+        "success": true,
+        "final_answer_preview": "灰原哀的真实年龄与外表的年龄差为11岁，而江户川柯南（工藤新一）17岁与灰原哀18岁的实际年龄差为1岁。",
+        "expected_answer_contains": [
+          "11",
+          "1"
+        ]
+      },
+      {
+        "id": 3,
+        "success": false,
+        "final_answer_preview": "根据搜索结果，在 `data/agent-fixtures` 档案柜中共有 7 份 .md 文件。",
+        "expected_answer_contains": [
+          [
+            "10",
+            "十"
+          ]
+        ]
+      },
+      {
+        "id": 4,
+        "success": true,
+        "final_answer_preview": "根据维基百科，亚瑟·柯南·道尔最著名的侦探角色是福尔摩斯。",
+        "expected_answer_contains": [
+          [
+            "福尔摩斯",
+            "Holmes",
+            "Sherlock"
+          ]
+        ]
+      },
+      {
+        "id": 5,
+        "success": true,
+        "final_answer_preview": "根据柯南百科中的信息，灰原哀（宫野志保）的真实年龄是18岁，而她的外表年龄只有7岁。因此，她缩小了11岁。\n\n缩小的岁数是：18 - 7 = 11岁。",
+        "expected_answer_contains": [
+          [
+            "APTX",
+            "雪莉",
+            "Sherry",
+            "宫野",
+            "研发",
+            "发明"
+          ],
+          "11"
+        ]
+      },
+      {
+        "id": 6,
+        "success": true,
+        "final_answer_preview": "'level' 是回文，而 'vodka' 不是回文。结果如下：\n\n- 'level': True\n- 'vodka': False",
+        "expected_answer_contains": [
+          "level",
+          "True",
+          "vodka",
+          "False"
+        ]
+      },
+      {
+        "id": 7,
+        "success": true,
+        "final_answer_preview": "以下是包含 'APTX4869' 的档案路径：\n\n1. README.md\n2. aptx4869_dossier.md\n3. black_org_roster.md\n4. cipher_todo.md\n5. detective_allie",
+        "expected_answer_contains": [
+          "aptx4869_dossier.md"
+        ]
+      },
+      {
+        "id": 8,
+        "success": true,
+        "final_answer_preview": "计算结果为 sqrt(4869) ≈ 69.7782，小数点后至少四位是 69.7782。",
+        "expected_answer_contains": [
+          [
+            "69.778",
+            "69.78"
+          ]
+        ]
+      },
+      {
+        "id": 9,
+        "success": true,
+        "final_answer_preview": "根据柯南百科，赤井秀一所属的阵营是 FBI。他在成为 FBI 的顶尖搜查官之前，曾化名为诸星大卧底于黑衣组织。为了使 CIA 情报员水无伶奈重新卧底组织，并取得琴酒的信任，他假装被琴酒枪击身亡。之后，他以新身份冲矢昴继续调查组织并保护灰原哀",
+        "expected_answer_contains": [
+          [
+            "FBI",
+            "赤井"
+          ],
+          [
+            "红",
+            "FBI"
+          ]
+        ]
+      },
+      {
+        "id": 10,
+        "success": false,
+        "final_answer_preview": "README.md 的第一段内容是介绍这个目录是毛利侦探事务所整理的主线速查柜，包含了 APTX4869、黑衣组织等相关资料。",
+        "expected_answer_contains": [
+          "米花町",
+          "档案"
+        ]
+      },
+      {
+        "id": 11,
+        "success": true,
+        "final_answer_preview": "两者的年龄差之和为 21 岁，而 10 * 11 的结果是 110。因此，两者的年龄差之和乘以 10 * 11 的结果是 2310。",
+        "expected_answer_contains": [
+          "21",
+          "110"
+        ]
+      },
+      {
+        "id": 12,
+        "success": true,
+        "final_answer_preview": "根据搜索结果，琴酒强迫工藤新一服用了 APTX4869。受害者本名是工藤新一。",
+        "expected_answer_contains": [
+          [
+            "工藤新一",
+            "新一"
+          ]
+        ]
+      },
+      {
+        "id": 13,
+        "success": true,
+        "final_answer_preview": "根据档案信息，安室透的公安真名是降谷零，他在黑衣组织里的代号是Bourbon。",
+        "expected_answer_contains": [
+          [
+            "降谷零",
+            "降谷"
+          ],
+          [
+            "波本",
+            "Bourbon"
+          ]
+        ]
+      },
+      {
+        "id": 14,
+        "success": false,
+        "final_answer_preview": "根据现有信息，宫野志保的组织代号是**灰原哀**。关于档案柜中没有找到更多关于宫野志保代号的具体文件，可能是因为相关信息较为隐晦或者不在公开的档案中。如果有其他需要查询的信息，请告诉我。",
+        "expected_answer_contains": [
+          [
+            "姐",
+            "姊妹",
+            "姐妹",
+            "姐姐"
+          ],
+          [
+            "Sherry",
+            "雪莉"
+          ]
+        ]
+      },
+      {
+        "id": 15,
+        "success": true,
+        "final_answer_preview": "1^2 + … + 10^2 的结果是 385。",
+        "expected_answer_contains": [
+          "385"
+        ]
+      },
+      {
+        "id": 16,
+        "success": true,
+        "final_answer_preview": "贝尔摩德知道江户川柯南和灰原哀的真实身份，但并未将这些信息上报给黑衣组织。",
+        "expected_answer_contains": [
+          [
+            "贝尔摩德",
+            "Vermouth"
+          ],
+          [
+            "秘密",
+            "知晓",
+            "知道",
+            "新一",
+            "柯南"
+          ]
+        ]
+      },
+      {
+        "id": 17,
+        "success": true,
+        "final_answer_preview": "根据档案柜中的信息，冲矢昴实际上是赤井秀一的一个伪装身份。赤井秀一使用冲矢昴的身份来监视和保护工藤新一（江户川柯南）一家，并且在组织内部扮演着重要的角色。冲矢昴这个身份还涉及到与其他重要角色如琴酒、贝尔摩德以及降谷零的复杂关系。",
+        "expected_answer_contains": [
+          [
+            "赤井秀一",
+            "赤井"
+          ]
+        ]
+      },
+      {
+        "id": 18,
+        "success": true,
+        "final_answer_preview": "游乐场事件之后，工藤新一化名为江户川柯南，寄住在毛利家。",
+        "expected_answer_contains": [
+          [
+            "毛利",
+            "毛利家"
+          ]
+        ]
+      },
+      {
+        "id": 19,
+        "success": true,
+        "final_answer_preview": "琴酒属于黑衣组织，组织的最爱数字梗 4+8+6+9 等于 27。",
+        "expected_answer_contains": [
+          [
+            "黑",
+            "组织",
+            "Gin",
+            "琴酒"
+          ],
+          "27"
+        ]
+      },
+      {
+        "id": 20,
+        "success": true,
+        "final_answer_preview": "根据档案搜索结果，未找到关于「夏洛克」谐音的说明。不过，通过查询维基百科得知，夏洛克·福尔摩斯的搭档（助手）常见中文译名为华生医生，即约翰·H·华生医生。",
+        "expected_answer_contains": [
+          [
+            "APTX4869",
+            "夏洛克",
+            "Sherlock",
+            "4869"
+          ],
+          [
+            "华生",
+            "Watson",
+            "约翰"
+          ]
+        ]
+      },
+      {
+        "id": 21,
+        "success": true,
+        "final_answer_preview": "药物编号各位连乘的结果是 1728。",
+        "expected_answer_contains": [
+          "1728"
+        ]
+      },
+      {
+        "id": 22,
+        "success": true,
+        "final_answer_preview": "新一和灰原的年龄差距平方和是 221。",
+        "expected_answer_contains": [
+          "221"
+        ]
+      },
+      {
+        "id": 23,
+        "success": true,
+        "final_answer_preview": "17² - 7² 的结果是 240。这可以理解为江户川柯南真实年龄的平方减去他外表年龄的平方。",
+        "expected_answer_contains": [
+          "240"
+        ]
+      },
+      {
+        "id": 24,
+        "success": true,
+        "final_answer_preview": "计算结果是 \\(18^2 - 7^2 = 275\\)。",
+        "expected_answer_contains": [
+          "275"
+        ]
+      },
+      {
+        "id": 25,
+        "success": true,
+        "final_answer_preview": "根据档案搜索结果，没有找到相关文件。不过，我们已经计算出了四人的年龄数字之和为49。",
+        "expected_answer_contains": [
+          "49"
+        ]
+      },
+      {
+        "id": 26,
+        "success": true,
+        "final_answer_preview": "4869 除以 17 的商是 286，余数是 7。",
+        "expected_answer_contains": [
+          "286",
+          "7"
+        ]
+      },
+      {
+        "id": 27,
+        "success": true,
+        "final_answer_preview": "1..17 的和减去 1..7 的和的结果是 125。",
+        "expected_answer_contains": [
+          "125"
+        ]
+      },
+      {
+        "id": 28,
+        "success": true,
+        "final_answer_preview": "log10(4869) 的值大约是 3.687，小数点后至少 3 位是 3.687。",
+        "expected_answer_contains": [
+          [
+            "3.687",
+            "3.69"
+          ]
+        ]
+      }
+    ]
+  },
+  "react_agent": {
+    "label": "ReActAgent",
+    "rate": 0.786,
+    "success": 22,
+    "n": 28,
+    "details": [
+      {
+        "id": 1,
+        "success": false,
+        "final_answer_preview": "4869乘以新一的真实年龄和外表年龄的差值等于48690。",
+        "expected_answer_contains": [
+          "10",
+          "48690"
+        ]
+      },
+      {
+        "id": 2,
+        "success": true,
+        "final_answer_preview": "灰原哀与新一的年龄差分别为：11岁、-1岁。",
+        "expected_answer_contains": [
+          "11",
+          "1"
+        ]
+      },
+      {
+        "id": 3,
+        "success": false,
+        "final_answer_preview": "在 data/agent-fixtures 档案柜中共有 8 份 .md 文件。",
+        "expected_answer_contains": [
+          [
+            "10",
+            "十"
+          ]
+        ]
+      },
+      {
+        "id": 4,
+        "success": true,
+        "final_answer_preview": "柯南·道尔最著名的侦探角色是福尔摩斯。",
+        "expected_answer_contains": [
+          [
+            "福尔摩斯",
+            "Holmes",
+            "Sherlock"
+          ]
+        ]
+      },
+      {
+        "id": 5,
+        "success": false,
+        "final_answer_preview": "灰原哀缩小了11岁。",
+        "expected_answer_contains": [
+          [
+            "APTX",
+            "雪莉",
+            "Sherry",
+            "宫野",
+            "研发",
+            "发明"
+          ],
+          "11"
+        ]
+      },
+      {
+        "id": 6,
+        "success": true,
+        "final_answer_preview": "函数 `is_palindrome` 正确地判断了给定字符串是否为回文。对于输入 'level' 和 'vodka'，'level' 是回文，而 'vodka' 不是。因此，输出应为：\n\n```python\n{'level': True, ",
+        "expected_answer_contains": [
+          "level",
+          "True",
+          "vodka",
+          "False"
+        ]
+      },
+      {
+        "id": 7,
+        "success": true,
+        "final_answer_preview": "包含 'APTX4869' 的档案路径如下：\n- data/agent-fixtures/aptx4869_dossier.md\n- data/agent-fixtures/main_plot_notes.md",
+        "expected_answer_contains": [
+          "aptx4869_dossier.md"
+        ]
+      },
+      {
+        "id": 8,
+        "success": false,
+        "final_answer_preview": "Thought: 继续尝试直接提供正确的 Python 代码字符串。\nAction: python_sandbox\nAction Input: {\"code\": 'round(sqrt(4869), 4)'}",
+        "expected_answer_contains": [
+          [
+            "69.778",
+            "69.78"
+          ]
+        ]
+      },
+      {
+        "id": 9,
+        "success": true,
+        "final_answer_preview": "赤井秀一最初是FBI的顶尖搜查官，后来卧底于黑衣组织。根据档案柜中的信息，红方名单里确实有赤井秀一的名字，因此他属于红方（FBI）。",
+        "expected_answer_contains": [
+          [
+            "FBI",
+            "赤井"
+          ],
+          [
+            "红",
+            "FBI"
+          ]
+        ]
+      },
+      {
+        "id": 10,
+        "success": false,
+        "final_answer_preview": "README.md的第一段描述了这个目录是毛利侦探事务所整理的主线速查柜，包含了APTX4869、黑衣组织等相关信息。",
+        "expected_answer_contains": [
+          "米花町",
+          "档案"
+        ]
+      },
+      {
+        "id": 11,
+        "success": true,
+        "final_answer_preview": "年龄差之和为 21，10 乘以 11 的结果为 110。",
+        "expected_answer_contains": [
+          "21",
+          "110"
+        ]
+      },
+      {
+        "id": 12,
+        "success": true,
+        "final_answer_preview": "琴酒强迫工藤新一服用了 APTX4869。工藤新一的真实姓名是工藤新一。",
+        "expected_answer_contains": [
+          [
+            "工藤新一",
+            "新一"
+          ]
+        ]
+      },
+      {
+        "id": 13,
+        "success": true,
+        "final_answer_preview": "安室透的公安真名是降谷零，他在黑衣组织中的代号是波本。",
+        "expected_answer_contains": [
+          [
+            "降谷零",
+            "降谷"
+          ],
+          [
+            "波本",
+            "Bourbon"
+          ]
+        ]
+      },
+      {
+        "id": 14,
+        "success": false,
+        "final_answer_preview": "宫野志保的组织代号是 Sherry（雪莉）。关于宫野明美和宫野志保的关系，档案中没有明确说明，但从名字来看，她们可能是同一个人的不同称呼。宫野志保的真实年龄是18岁，缩小后的化名为灰原哀。",
+        "expected_answer_contains": [
+          [
+            "姐",
+            "姊妹",
+            "姐妹",
+            "姐姐"
+          ],
+          [
+            "Sherry",
+            "雪莉"
+          ]
+        ]
+      },
+      {
+        "id": 15,
+        "success": true,
+        "final_answer_preview": "1 到 10 的平方和是 385。",
+        "expected_answer_contains": [
+          "385"
+        ]
+      },
+      {
+        "id": 16,
+        "success": true,
+        "final_answer_preview": "贝尔摩德知道新一/柯南和灰原哀的真实身份，但她没有将这些信息上报给黑衣组织。",
+        "expected_answer_contains": [
+          [
+            "贝尔摩德",
+            "Vermouth"
+          ],
+          [
+            "秘密",
+            "知晓",
+            "知道",
+            "新一",
+            "柯南"
+          ]
+        ]
+      },
+      {
+        "id": 17,
+        "success": true,
+        "final_answer_preview": "冲矢昴实际上是赤井秀一的一个伪装身份，用于监视和保护目标。",
+        "expected_answer_contains": [
+          [
+            "赤井秀一",
+            "赤井"
+          ]
+        ]
+      },
+      {
+        "id": 18,
+        "success": true,
+        "final_answer_preview": "游乐场事件之后，新一化名江户川柯南寄住在毛利家。",
+        "expected_answer_contains": [
+          [
+            "毛利",
+            "毛利家"
+          ]
+        ]
+      },
+      {
+        "id": 19,
+        "success": true,
+        "final_answer_preview": "琴酒属于黑衣组织，该组织最爱的数字梗4+8+6+9等于27。",
+        "expected_answer_contains": [
+          [
+            "黑",
+            "组织",
+            "Gin",
+            "琴酒"
+          ],
+          "27"
+        ]
+      },
+      {
+        "id": 20,
+        "success": true,
+        "final_answer_preview": "夏洛克·福尔摩斯的搭档，即华生医生，在中文译名中通常被称为“华生”或“华生医生”。",
+        "expected_answer_contains": [
+          [
+            "APTX4869",
+            "夏洛克",
+            "Sherlock",
+            "4869"
+          ],
+          [
+            "华生",
+            "Watson",
+            "约翰"
+          ]
+        ]
+      },
+      {
+        "id": 21,
+        "success": true,
+        "final_answer_preview": "4 * 8 * 6 * 9 的结果是 1728。",
+        "expected_answer_contains": [
+          "1728"
+        ]
+      },
+      {
+        "id": 22,
+        "success": true,
+        "final_answer_preview": "10² + 11² 的结果是 221。",
+        "expected_answer_contains": [
+          "221"
+        ]
+      },
+      {
+        "id": 23,
+        "success": true,
+        "final_answer_preview": "17² - 7² 的结果是 240。",
+        "expected_answer_contains": [
+          "240"
+        ]
+      },
+      {
+        "id": 24,
+        "success": true,
+        "final_answer_preview": "18² - 7² 的结果是 275。",
+        "expected_answer_contains": [
+          "275"
+        ]
+      },
+      {
+        "id": 25,
+        "success": true,
+        "final_answer_preview": "四人的数字之和是49。",
+        "expected_answer_contains": [
+          "49"
+        ]
+      },
+      {
+        "id": 26,
+        "success": true,
+        "final_answer_preview": "4869 除以 17 的商为 286，余数为 5。",
+        "expected_answer_contains": [
+          "286",
+          "7"
+        ]
+      },
+      {
+        "id": 27,
+        "success": true,
+        "final_answer_preview": "1 到 17 的整数和减去 1 到 7 的整数和的差值是 125。",
+        "expected_answer_contains": [
+          "125"
+        ]
+      },
+      {
+        "id": 28,
+        "success": true,
+        "final_answer_preview": "log10(4869) 的值大约是 3.687。",
+        "expected_answer_contains": [
+          [
+            "3.687",
+            "3.69"
+          ]
+        ]
+      }
+    ]
+  },
+  "comparison": {
+    "qwen_rate": 0.893,
+    "react_rate": 0.786,
+    "delta_qwen_minus_react": 0.107
+  }
+}

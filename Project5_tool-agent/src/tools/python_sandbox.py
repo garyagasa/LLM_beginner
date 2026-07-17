@@ -17,6 +17,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
+import signal
 from typing import Any
 
 TOOL_SCHEMA: dict = {
@@ -62,20 +65,56 @@ _SAFE_BUILTINS: dict[str, Any] = {
     "round": round,
     "pow": pow,
     "isinstance": isinstance,
+    "True": True,
+    "False": False,
+    "None": None,
 }
+
+_FORBIDDEN_SNIPPETS = (
+    "import os",
+    "import subprocess",
+    "import socket",
+    "import sys",
+    "__import__",
+)
+
+_EXEC_TIMEOUT_SEC = 2
+
+
+def _timeout_handler(_signum, _frame) -> None:
+    raise TimeoutError("execution timed out")
 
 
 def run(args: dict) -> str:
-    """在受限环境中执行代码并返回 stdout。
+    """在受限环境中执行代码并返回 stdout。"""
+    try:
+        code = args.get("code")
+        if not code or not isinstance(code, str):
+            return "Error: missing 'code'"
 
-    TODO(M1-b):
-      1. 取 args["code"]；缺失则返回错误字符串
-      2. 准备 stdout 捕获：io.StringIO + contextlib.redirect_stdout
-      3. 构造受限 globals，例如 {"__builtins__": _SAFE_BUILTINS}
-      4. 用超时机制执行（signal.alarm / threading+timeout 等）
-      5. 成功：返回捕获的 stdout；若为空可返回 "(no output)"
-      6. 失败：返回 f"Error: ..."
-    """
-    # ---- 你的代码开始 ----
-    raise NotImplementedError("TODO(M1-b): 实现 python_sandbox.run")
-    # ---- 你的代码结束 ----
+        lowered = code.lower()
+        for bad in _FORBIDDEN_SNIPPETS:
+            if bad in lowered:
+                return f"Error: forbidden: {bad}"
+
+        buf = io.StringIO()
+        globals_dict = {"__builtins__": _SAFE_BUILTINS}
+        locals_dict: dict[str, Any] = {}
+
+        old_handler = signal.getsignal(signal.SIGALRM)
+        signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.alarm(_EXEC_TIMEOUT_SEC)
+        try:
+            with contextlib.redirect_stdout(buf):
+                exec(code, globals_dict, locals_dict)  # noqa: S102
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
+
+        out = buf.getvalue().strip()
+        return out if out else "(no output)"
+
+    except TimeoutError:
+        return "Error: execution timed out"
+    except Exception as e:
+        return f"Error: {e}"

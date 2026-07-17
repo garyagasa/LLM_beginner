@@ -34,7 +34,7 @@ TOOL_SCHEMA: dict = {
             "properties": {
                 "expression": {
                     "type": "string",
-                    "description": (
+                    "description": ( 
                         "Math expression, e.g. '17 - 7', '4869 * 2', 'sqrt(4869)'."
                     ),
                 },
@@ -83,7 +83,64 @@ def _eval_node(node: ast.AST) -> Any:
       6. 其他节点类型 → raise ValueError
     """
     # ---- 你的代码开始 ----
-    raise NotImplementedError("TODO(M1-a): 实现 _eval_node 白名单求值")
+    if isinstance(node, ast.Expression):
+        return _eval_node(node.body)
+
+    #########################################################
+    # 数字字面量（Constant / Num）→ 直接返回数值
+    #########################################################
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, int) or isinstance(node.value, float):
+            return node.value
+        else:
+            raise ValueError(f"不支持的数字类型: {type(node.value)}")
+    if isinstance(node, ast.Num):
+        if isinstance(node.n, int) or isinstance(node.n, float):
+            return node.n
+        else:
+            raise ValueError(f"不支持的数字类型: {type(node.n)}")
+    #########################################################
+    # 二元运算（BinOp）→ 查 _BIN_OPS 递归求左右
+    #########################################################
+    if isinstance(node, ast.BinOp):
+        op_type = type(node.op)
+        if op_type not in _BIN_OPS:
+            raise ValueError(f"unsupported operator: {op_type}")
+        return _BIN_OPS[op_type](_eval_node(node.left), _eval_node(node.right))
+    #########################################################
+    # 一元运算（UnaryOp）→ 查 _UNARY_OPS
+    #########################################################
+    if isinstance(node, ast.UnaryOp):
+        op_type = type(node.op)
+        if op_type not in _UNARY_OPS:
+            raise ValueError(f"unsupported unary: {op_type}")
+        return _UNARY_OPS[op_type](_eval_node(node.operand))
+    #########################################################
+    # 函数调用（Call）→ 函数名必须在 _FUNCS，且只允许位置参数
+    #########################################################
+    if isinstance(node, ast.Call):
+        if not isinstance(node.func, ast.Name):
+            raise ValueError("only simple function names allowed")
+        name = node.func.id
+        if name not in _FUNCS:
+            raise ValueError(f"function not allowed: {name}")
+        if node.keywords:
+            raise ValueError("keyword args not allowed")
+        args = [_eval_node(a) for a in node.args]
+        return _FUNCS[name](*args)
+    #########################################################
+    # 变量名（Name）→ 可允许 pi / e 常量；其余拒绝
+    #########################################################
+    if isinstance(node, ast.Name):
+        if node.id == "pi":
+            return math.pi
+        if node.id == "e":
+            return math.e
+        raise ValueError(f"name not allowed: {node.id}")
+    #########################################################
+    # 其他节点类型（其他节点类型）→ raise ValueError
+    #########################################################
+    raise ValueError(f"不支持的节点类型: {type(node)}")
     # ---- 你的代码结束 ----
 
 
@@ -98,5 +155,13 @@ def run(args: dict) -> str:
       5. 捕获异常，return f"Error: ..."
     """
     # ---- 你的代码开始 ----
-    raise NotImplementedError("TODO(M1-a): 实现 calculator.run")
+    try:
+        expr = args.get("expression")
+        if not expr or not isinstance(expr, str):
+            return "Error: missing 'expression'"
+        tree = ast.parse(expr.strip(), mode="eval")
+        result = _eval_node(tree)   # 或 _eval_node(tree.body)
+        return str(result)
+    except Exception as e:
+        return f"Error: {e}"
     # ---- 你的代码结束 ----

@@ -8,5 +8,8 @@ pydantic>=2.0
 numpy>=1.23
 tqdm>=4.65
 
-# 可选：M4 对照框架
+# 可选：M4 对照框架（Qwen-Agent）
 # qwen-agent>=0.0.10
+# soundfile
+# python-dateutil
+# json5

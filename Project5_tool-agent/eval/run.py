@@ -119,10 +119,78 @@ def test_multi_tool_success_rate():
             "rate": round(rate, 3), "n": len(tasks), "details": details}
 
 
+def _recovery_succeeded(final_answer: str, tool_steps: list[dict]) -> bool:
+    """错误恢复判定：Final Answer 或重试后的 Observation 含正确结果 48690。"""
+    norm_final = normalize_answer(final_answer)
+    if "48690" in norm_final:
+        return True
+    retry_obs = " ".join(
+        str(s.get("observation", "")) for s in tool_steps[1:]
+    )
+    return "48690" in normalize_answer(retry_obs)
+
+
 def test_error_recovery():
-    """注入错误工具响应（暂为可选；学生需要实现 src/agent.py 的 inject_error 钩子）。"""
-    return {"test": "error_recovery", "pass": None,
-            "skip": "需要学生实现 inject_error 测试钩子；可选实验"}
+    """M3：开启错误注入后，Agent 应在首次工具失败后重试并成功作答。"""
+    try:
+        from src.agent import ReActAgent
+    except ImportError as e:
+        return {"test": "error_recovery", "pass": False,
+                "error": f"Agent 导入失败：{e}"}
+
+    SIMULATED_ERROR = "Error: simulated tool failure"
+    # 纯离线题：只需 calculator，便于隔离「错误恢复」能力
+    task = (
+        "【错误恢复测试】APTX 档案里新一真实年龄 17、外表 7。"
+        "请计算 17 - 7，并告诉我 4869 乘以这个年龄差等于多少。"
+    )
+
+    agent = ReActAgent()
+    agent.enable_error_injection()
+
+    try:
+        trace = agent.run(task)
+    except Exception as e:
+        err = str(e).lower()
+        if any(k in err for k in ("socks", "connection", "connect", "timeout", "refused")):
+            return {"test": "error_recovery", "pass": None,
+                    "skip": f"LLM 不可用（可选实验跳过）：{e}"}
+        return {"test": "error_recovery", "pass": False, "error": str(e)}
+
+    if not isinstance(trace, dict):
+        return {"test": "error_recovery", "pass": False,
+                "error": "trace 不是 dict"}
+
+    steps = trace.get("steps", [])
+    tool_steps = [
+        s for s in steps
+        if isinstance(s, dict) and s.get("observation") is not None
+    ]
+    if not tool_steps:
+        return {"test": "error_recovery", "pass": False,
+                "error": "无带 observation 的工具步骤，错误注入未触发",
+                "steps_count": len(steps)}
+
+    first_obs = str(tool_steps[0].get("observation", ""))
+    injected = SIMULATED_ERROR in first_obs
+
+    final_answer = trace.get("final_answer", "")
+    retried = len(tool_steps) >= 2
+    recovered = _recovery_succeeded(final_answer, tool_steps) and retried
+
+    # 通过条件：注入成功 + 至少重试一次 + 关键结果正确
+    passed = injected and recovered
+    return {
+        "test": "error_recovery",
+        "pass": passed,
+        "injected": injected,
+        "retried": retried,
+        "recovered": recovered,
+        "steps_count": len(steps),
+        "tool_steps_count": len(tool_steps),
+        "first_observation_preview": first_obs[:120],
+        "final_answer_preview": str(final_answer)[:120],
+    }
 
 
 if __name__ == "__main__":
